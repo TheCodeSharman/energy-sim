@@ -1,0 +1,47 @@
+# Aurora Tariff 93 (Tasmania) — machine-readable source of truth for the simulator.
+#
+# These constants previously existed ONLY in prose (HomeAssistantConfig docs/CHANGELOG)
+# and as un-versioned `tariff:*` series inside VictoriaMetrics. This file is the sim's
+# authoritative copy. FY boundary is 2026-07-01 AEST.
+#
+# Rates are c/kWh; supply is c/day. `export_c_kwh` is the feed-in tariff (FiT).
+#
+# Three FY2025-26 numbers are RECOVERED from Aurora's own billed data rather than taken from
+# the source docs, because the doc values did not reproduce the bill. Recovery method: divide
+# Aurora's billed dollars for a leg by Aurora's own metered kWh for that leg, per day, across
+# June 2026 — each came out identical on all 30 days, so they are exact billed rates, not fits.
+#
+#   supply_c_day  — missing from the docs ("—"); billed "Other" is a stable $1.511814/day.
+#   peak_c_kwh    — docs said 31.948, billed is 35.4782.
+#   offpeak_c_kwh — docs said 14.876, billed is 16.6862.
+#
+# The doc values are believed to be ex-GST or stale: they imply a 13.3%/14.4% jump into
+# FY2026-27, and a different jump per leg. The recovered values imply exactly +2.0000% on both
+# legs (35.4782 x 1.02 = 36.187764 ~ 36.1878; 16.6862 x 1.02 = 17.019924 ~ 17.02), which is
+# what a single annual price rise looks like. export_c_kwh needed no correction — the doc value
+# 8.782 reproduces the billed FiT exactly.
+
+[[period]]                 # FY2025-26
+valid_from    = "2025-07-01"
+peak_c_kwh    = 35.4782    # recovered from billed $ / metered kWh (docs said 31.948)
+offpeak_c_kwh = 16.6862    # recovered from billed $ / metered kWh (docs said 14.876)
+export_c_kwh  = 8.782
+supply_c_day  = 151.1814   # recovered from Aurora daily "Other" (see CHANGELOG / validation)
+
+[[period]]                 # FY2026-27
+valid_from    = "2026-07-01"
+peak_c_kwh    = 36.1878
+offpeak_c_kwh = 17.02
+export_c_kwh  = 9.276
+supply_c_day  = 172.3469
+
+# Peak window: AEST Mon-Fri 7-10am & 4-9pm.
+# MetricsQL hour()/day_of_week() are UTC, and powerflow.yml encodes the window in UTC:
+# AEST 7-10am == UTC (prev day) 21:00-00:00; AEST 4-9pm == UTC 06:00-11:00.
+# Mirrors infra/vmalert/powerflow.yml `pf:is_peak` exactly.
+# CAVEAT: fixed UTC-hour offset assumes a fixed AEST offset (ignores DST); documented, not fixed.
+[peak_window]
+# utc_weekdays uses the Prometheus day_of_week() convention (Sun=0..Sat=6), matching
+# powerflow.yml, so 1-5 = Mon-Fri. tariff.py maps Python's weekday() onto this.
+utc_weekdays = [1, 2, 3, 4, 5]
+utc_hours    = [6, 7, 8, 9, 10, 21, 22, 23]

@@ -1,0 +1,176 @@
+"""Command-line interface: export / cost-report / validate.
+
+Rendering is done by pure functions (``render_*``) so it can be unit-tested; ``main`` only
+parses args and does IO.
+"""
+from __future__ import annotations
+
+import argparse
+from datetime import datetime, timezone
+from pathlib import Path
+from zoneinfo import ZoneInfo
+
+from energy_sim.application.cost_calculator import CostCalculatorService
+from energy_sim.application.validation import ValidationReport, ValidationService
+from energy_sim.domain.cost import CostBreakdown
+from energy_sim.infrastructure.csv_store import read_snapshot, write_snapshot
+from energy_sim.infrastructure.exporter import fetch_rows
+from energy_sim.infrastructure.tariff_loader import load_tariff
+from energy_sim.infrastructure.victoriametrics import DEFAULT_VM_URL, VictoriaMetricsClient
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+DEFAULT_TARIFF = REPO_ROOT / "config" / "tariffs.toml"
+
+# Aurora bills on local calendar days (Tasmania), so a "month" is a local month.
+BILLING_TZ = ZoneInfo("Australia/Hobart")
+
+
+# --- rendering (pure) ---------------------------------------------------------
+
+def render_cost_report(breakdown: CostBreakdown, title: str) -> str:
+    lines = [
+        f"Cost report — {title}",
+        "-" * 48,
+        f"  Import cost      {str(breakdown.import_cost):>12}",
+        f"  Export credit    {str(breakdown.export_credit):>12}",
+        f"  Supply charge    {str(breakdown.supply_charge):>12}",
+        f"  {'Net cost':<15}  {str(breakdown.net_cost):>12}",
+        "",
+        f"  Peak import      {breakdown.peak_import_kwh:>10.1f} kWh",
+        f"  Off-peak import  {breakdown.offpeak_import_kwh:>10.1f} kWh",
+    ]
+    return "\n".join(lines)
+
+
+def _residual(comparison) -> str:
+    pct = "n/a" if comparison.delta_pct is None else f"{comparison.delta_pct:+.1f}%"
+    return (f"modelled {str(comparison.modelled):>11}  actual {str(comparison.actual):>11}"
+            f"  Δ {str(comparison.delta):>10}  {pct:>7}")
+
+
+def render_validation(report: ValidationReport, tolerance_cents: float) -> str:
+    if not report.has_aurora:
+        return ("Validation — no Aurora billed data in this snapshot; cannot validate against "
+                "the bill.\n(Re-export a period where Aurora hourly data exists.)")
+
+    lines = [
+        "Validation against Aurora billed data",
+        "=" * 60,
+        "",
+        "THE NUMBER — modelled net cost vs what Aurora actually billed:",
+        f"  as measured   {_residual(report.end_to_end)}",
+    ]
+    if report.end_to_end_calibrated is not None:
+        lines.append(f"  CT-calibrated {_residual(report.end_to_end_calibrated)}")
+    if report.calibration is not None:
+        c = report.calibration
+        lines += [
+            "",
+            "  CT calibration (Aurora metered kWh / pf:* measured kWh):",
+            f"    import x{c.import_factor:.3f}    export x{c.export_factor:.3f}",
+            "  (>1 means the household CTs read low. Calibrating removes that metering bias, so",
+            "   the calibrated residual above is the rate model's own error.)",
+        ]
+
+    lines += [
+        "",
+        f"(pass tolerance: {tolerance_cents:.2f}c per leg)",
+        "",
+        "Check 1 — rate/formula in isolation (Aurora kWh x our rates vs Aurora $):",
+    ]
+    for c in report.rate_checks:
+        verdict = "PASS" if c.within(tolerance_cents) else "FAIL"
+        lines.append(
+            f"  {c.label:<16} modelled {str(c.modelled):>11}  actual {str(c.actual):>11}"
+            f"  Δ {str(c.delta):>9}  [{verdict}]"
+        )
+
+    cl = report.classifier
+    total = cl.agreements + cl.disagreements
+    lines += [
+        "",
+        "Check 2 — peak-window classifier vs Aurora's own hourly split:",
+        f"  {cl.agreements}/{total} hours agree, {cl.disagreements} disagree",
+    ]
+    if cl.mismatched_hours:
+        shown = ", ".join(ts.strftime("%Y-%m-%d %H:%MZ") for ts in cl.mismatched_hours[:5])
+        more = "" if len(cl.mismatched_hours) <= 5 else f" (+{len(cl.mismatched_hours) - 5} more)"
+        lines.append(f"  mismatched: {shown}{more}")
+
+    return "\n".join(lines)
+
+
+# --- IO commands --------------------------------------------------------------
+
+def month_bounds(month: str) -> tuple[datetime, datetime]:
+    """UTC [start, end) bounds of a ``YYYY-MM`` month in the BILLING timezone.
+
+    Aurora bills by local calendar day and stamps each day at local midnight, so a naive UTC
+    month window is offset by the UTC offset: it drops the month's first billed day and gains
+    the following month's first. Resolving the month in ``BILLING_TZ`` (DST included) keeps the
+    pf:* flows and the Aurora dollars over exactly the same real days.
+    """
+    year, mon = (int(x) for x in month.split("-"))
+    start = datetime(year, mon, 1, tzinfo=BILLING_TZ)
+    end = datetime(year + (mon == 12), (mon % 12) + 1, 1, tzinfo=BILLING_TZ)
+    return start.astimezone(timezone.utc), end.astimezone(timezone.utc)
+
+
+def _cmd_export(args) -> None:
+    start, end = month_bounds(args.month)
+    client = VictoriaMetricsClient(args.vm_url)
+    rows = fetch_rows(client, start, end, args.step_seconds)
+    write_snapshot(args.out, rows)
+    total_import = sum(r.grid_import_kwh for r in rows)
+    total_export = sum(r.grid_export_kwh for r in rows)
+    print(f"Wrote {len(rows)} rows to {args.out} "
+          f"(step {args.step_seconds}s; import {total_import:.1f} kWh, export {total_export:.1f} kWh)")
+
+
+def _cmd_cost_report(args) -> None:
+    snapshot = read_snapshot(args.infile)
+    tariff = load_tariff(args.tariff)
+    breakdown = CostCalculatorService().calculate(snapshot.to_site(), tariff)
+    print(render_cost_report(breakdown, title=Path(args.infile).stem))
+
+
+def _cmd_validate(args) -> None:
+    snapshot = read_snapshot(args.infile)
+    tariff = load_tariff(args.tariff)
+    report = ValidationService().validate(snapshot, tariff)
+    print(render_validation(report, tolerance_cents=args.tolerance_cents))
+
+    errors = snapshot.to_site().energy_balance_errors(tolerance_kwh=args.balance_tolerance_kwh)
+    if errors:
+        print(f"\nEnergy-balance: {len(errors)} interval(s) exceed "
+              f"{args.balance_tolerance_kwh} kWh (data-quality signal).")
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(prog="energy_sim", description="Home energy-cost simulator.")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    p_export = sub.add_parser("export", help="Snapshot a month from VictoriaMetrics to CSV.")
+    p_export.add_argument("--month", required=True, help="YYYY-MM (UTC month window)")
+    p_export.add_argument("--out", required=True, help="Output CSV path")
+    p_export.add_argument("--step-seconds", type=int, default=3600, dest="step_seconds")
+    p_export.add_argument("--vm-url", default=DEFAULT_VM_URL, dest="vm_url")
+    p_export.set_defaults(func=_cmd_export)
+
+    p_cost = sub.add_parser("cost-report", help="Cost breakdown for a snapshot.")
+    p_cost.add_argument("--in", required=True, dest="infile", help="Snapshot CSV path")
+    p_cost.add_argument("--tariff", default=str(DEFAULT_TARIFF))
+    p_cost.set_defaults(func=_cmd_cost_report)
+
+    p_val = sub.add_parser("validate", help="Validate a snapshot against Aurora billed data.")
+    p_val.add_argument("--in", required=True, dest="infile", help="Snapshot CSV path")
+    p_val.add_argument("--tariff", default=str(DEFAULT_TARIFF))
+    p_val.add_argument("--tolerance-cents", type=float, default=1.0, dest="tolerance_cents")
+    p_val.add_argument("--balance-tolerance-kwh", type=float, default=0.01, dest="balance_tolerance_kwh")
+    p_val.set_defaults(func=_cmd_validate)
+    return parser
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = build_parser().parse_args(argv)
+    args.func(args)
