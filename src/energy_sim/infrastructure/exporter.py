@@ -5,6 +5,19 @@ Three sources, three cadences:
     resolution is just the query step.
   * Aurora billed kWh — HOURLY, split by tariff leg; attached where the hour-stamp lines up
     with a row (blank elsewhere).
+
+Rows are keyed by INTERVAL START, and the two sources do not agree on what a stamp means:
+
+  * `avg_over_time(pf:*[Ns])` evaluated at t is the mean over (t-N, t] — the window ENDING at
+    t — so its energy belongs to the interval starting at t-N. Power samples are shifted back
+    one step accordingly, and the query window is moved a step forward to compensate.
+  * Aurora stamps each hourly kWh at the hour it covers (interval start), so those are taken
+    as-is. Aurora's own peak/off-peak split agrees with the peak-window rule on 710/710 hours
+    of June 2026 under this reading, which is what confirms it.
+
+Treating a power stamp as an interval start charges its energy at the neighbouring hour's
+tariff. That error shrinks with the step size, so it shows up as a modelled cost that drifts
+when you change `--step-seconds` — see REQUIREMENTS.md R1.4.
   * Aurora billed dollars — DAILY only (Aurora records no hourly dollars). Fetched as RAW
     samples so each day contributes exactly one value, and attached to a single row. Querying
     these through query_range would smear each daily value across all 24 hours (staleness
@@ -57,7 +70,10 @@ def assemble_rows(
     aurora_dollars: Series,
     step_seconds: int,
 ) -> list[SnapshotRow]:
-    p = {name: dict(series) for name, series in power.items()}
+    # A power sample stamped t is the average over (t-step, t], so re-key it to the interval
+    # it actually covers. Aurora's stamps are already interval starts.
+    covered = timedelta(seconds=step_seconds)
+    p = {name: {ts - covered: value for ts, value in series} for name, series in power.items()}
     kwh = {name: dict(series) for name, series in aurora_kwh.items()}
 
     def kwh_from_watts(name: str, ts: datetime) -> float | None:
@@ -117,11 +133,17 @@ def _dollars_by_row(
 def fetch_rows(
     client: VictoriaMetricsClient, start: datetime, end: datetime, step_seconds: int
 ) -> list[SnapshotRow]:
-    """Rows for the period [start, end). VM's own bounds are inclusive, so ``end`` is pulled
-    back a second — otherwise consecutive months would share their boundary sample."""
+    """Rows for the period [start, end), each stamped at its interval start.
+
+    Power is queried a step ahead: a sample stamped t covers (t-step, t], so the samples that
+    tile [start, end) are the ones stamped (start+step .. end]. Aurora's stamps are interval
+    starts, so those are queried over the period itself, with ``end`` pulled back a second —
+    VM's bounds are inclusive, and consecutive months must not share a boundary sample.
+    """
     last = end - timedelta(seconds=1)
+    first_power_stamp = start + timedelta(seconds=step_seconds)
     power = {
-        name: client.query_range(q.format(step=step_seconds), start, last, step_seconds)
+        name: client.query_range(q.format(step=step_seconds), first_power_stamp, end, step_seconds)
         for name, q in POWER_QUERIES.items()
     }
     aurora_kwh = {

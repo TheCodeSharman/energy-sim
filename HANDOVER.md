@@ -23,7 +23,7 @@ Two repos:
 Pure-stdlib runtime; pytest via the Nix flake. **`pytest` is not on the global PATH** — always:
 ```sh
 cd ~/Projects/energy-sim
-nix develop --command pytest tests/        # 89 tests, green
+nix develop --command pytest tests/        # 92 tests, green
 nix develop --command python -m energy_sim {export,cost-report,validate} ...
 ```
 
@@ -31,8 +31,9 @@ nix develop --command python -m energy_sim {export,cost-report,validate} ...
 
 ```
 THE NUMBER — modelled net cost vs what Aurora actually billed:
-  as measured   modelled $177.97  actual $180.91  Δ -$2.94  -1.6%
-  CT-calibrated modelled $181.20  actual $180.91  Δ +$0.29  +0.2%
+  as measured   modelled $176.96  actual $180.91  Δ -$3.94  -2.2%
+  CT-calibrated modelled $180.10  actual $180.91  Δ -$0.81  -0.4%
+  (identical to the cent at --step-seconds 3600 / 900 / 300)
   CT calibration: import x1.027   export x1.071
 
 Check 1 — rate/formula in isolation:  all four legs PASS at $0.00 delta
@@ -62,7 +63,7 @@ Now evaluated in `Australia/Hobart` (`[peak_window]` is `timezone` + `local_week
 The model had been *under*-charging by $1.05, so the headline residual moved slightly further
 over — correctness was preferred to the flattering number.
 
-## What's built (energy-sim) — DDD, TDD, 89 tests green
+## What's built (energy-sim) — DDD, TDD, 92 tests green
 
 ```
 src/energy_sim/
@@ -162,5 +163,8 @@ them. With these in place all four rate legs validate at **$0.00** delta.
 
 - `HomeAssistantConfig/scripts/aurora_import.py` is still uncommitted in that repo.
 - The energy-balance signal (16 June intervals over 0.01 kWh) is unexplained.
-- The only cost error left in June is **+$0.29**: 1.55 kWh of 670 lands on the wrong side of an
-  hour boundary vs Aurora's own split. Sub-hour (`--step-seconds 300`) data would likely close it.
+- The only cost error left in June is **-$0.81**, and it is NOT a resolution artefact — 3600s,
+  900s and 300s agree to the cent. We allocate **0.64pp less** energy to peak than Aurora does,
+  stably. Likely a timing difference between the CT stream and Aurora's meter integration.
+- `--step-seconds 60` fails with HTTP 422: 43,200 points exceeds VM's `maxPointsPerTimeseries`.
+  The client surfaces it as a raw traceback; it deserves a real error message.

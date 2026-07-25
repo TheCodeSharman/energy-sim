@@ -149,6 +149,47 @@ allocation of energy across hour boundaries, the only error left in the model.
 
 ---
 
+## R1.4 — Power samples are keyed to the interval they cover (current)
+
+**Requirement.** A modelled cost must not depend on `--step-seconds`. Resolution is a sampling
+choice; changing it may refine a number but must not move it systematically.
+
+**How it surfaced.** Re-running June at 3600 / 900 / 300s to try to close R1.3's residual moved
+it instead — +$0.29, -$0.30, -$0.66. A residual that tracks the step size is a bug in how the
+step is interpreted, not a resolution artefact.
+
+**What was wrong.** `avg_over_time(pf:*[Ns])` evaluated at t is the mean over **(t-N, t]** — the
+window *ending* at t. Verified directly: at 2026-06-10T06:00:00Z it returns 434.000 W, exactly
+the mean of 05:00–06:00Z, against 483.400 W for 06:00–07:00Z. `assemble_rows` was keying that
+sample as the interval *starting* at t, shifting every reading forward by one whole step and
+charging its energy at the neighbouring hour's tariff.
+
+Aurora's hourly kWh, by contrast, are stamped at the hour they cover. Their own peak/off-peak
+split agrees with the peak-window rule on 710/710 hours under that reading, which is what
+confirms the two sources disagree about what a stamp means.
+
+**Why the old hourly number looked good.** Checking peak share against Aurora's 24.603%:
+
+| step | as interval start (old) | as interval end (correct) |
+|---|---|---|
+| 3600s | +0.232pp | -0.630pp |
+| 900s | -0.240pp | -0.639pp |
+| 300s | -0.523pp | -0.641pp |
+
+The correct reading is **resolution-independent**; the old one drifts. R1.3's +$0.29 at hourly
+was luck — a one-hour shift partially cancelling a real bias.
+
+**Result.** 3600s, 900s and 300s now agree **to the cent** (-2.2% as measured, **-0.4%**
+calibrated, 653.3 kWh import at every resolution). The honest residual is **-$0.81**, replacing
+a flattering -$0.29.
+
+**What is left.** That -$0.81 is the whole of the remaining error and is now a single, stable
+quantity: we allocate **0.64pp less** energy to peak than Aurora does, at every resolution. It is
+not a bucketing artefact — sub-hour data does not touch it. Most likely a timing difference
+between the CT stream and Aurora's own meter integration. This is the next thing to chase.
+
+---
+
 ## R2 — Battery what-if (planned, not built)
 
 **Requirement (anticipated).** Given a hypothetical home battery (capacity, power, round-trip
