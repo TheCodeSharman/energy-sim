@@ -1,32 +1,45 @@
 """Tariff domain: peak-window classification, time-of-use rates, period selection.
 
-Mirrors infra/vmalert/powerflow.yml's `pf:is_peak` / `pf:import_rate_c_kwh` so the sim's
-cost model matches the metrics layer. Rates are c/kWh (Decimal); supply is c/day.
+Rates are c/kWh (Decimal); supply is c/day.
 
-CAVEAT (documented, not fixed): the peak window is expressed in fixed UTC hours, matching
-the vmalert source, which assumes a fixed AEST offset and so ignores daylight saving.
+The peak window is evaluated in the BILLING TIMEZONE, because that is how Aurora bills it:
+local Mon-Fri, 7-10am and 4-9pm. `infra/vmalert/powerflow.yml` instead encodes it as fixed
+UTC hours (Mon-Fri, [6,11) union [21,24)), which is wrong twice over:
+
+  * The weekday test lands on the UTC date, but the 21:00-24:00Z block is the NEXT local day.
+    So UTC-Friday 21-24Z is Saturday morning locally (billed off-peak, charged peak) and
+    UTC-Sunday 21-24Z is Monday morning locally (billed peak, charged off-peak). Over June
+    2026 this misclassified 27 hours — every single classifier mismatch against Aurora's own
+    hourly split, and worth -$1.05 on that month's bill.
+  * The fixed offset ignores daylight saving, so both blocks sit an hour off for the ~half of
+    the year Tasmania is on AEDT.
+
+Evaluating in the billing timezone fixes both. This deliberately diverges from powerflow.yml
+until the same fix is applied there; Aurora's billed data is the ground truth, not the metrics
+layer.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, tzinfo
 from decimal import Decimal
 
 
 @dataclass(frozen=True)
 class PeakWindow:
-    """When time-of-use import is charged at the peak rate.
+    """When time-of-use import is charged at the peak rate, in local billing time.
 
-    Weekdays use the Prometheus ``day_of_week()`` convention (Sun=0..Sat=6) so the config
-    values match powerflow.yml. Python's ``datetime.weekday()`` (Mon=0..Sun=6) is mapped on.
+    Weekdays use the ISO convention (Mon=1..Sun=7), so Mon-Fri is {1,2,3,4,5}. Hours are the
+    local hour a period starts, so 4-9pm is {16,17,18,19,20}.
     """
 
-    utc_weekdays: frozenset[int]
-    utc_hours: frozenset[int]
+    timezone: tzinfo
+    local_weekdays: frozenset[int]
+    local_hours: frozenset[int]
 
     def contains(self, dt_utc: datetime) -> bool:
-        prometheus_dow = (dt_utc.weekday() + 1) % 7  # Mon=0..Sun=6 -> Sun=0..Sat=6
-        return prometheus_dow in self.utc_weekdays and dt_utc.hour in self.utc_hours
+        local = dt_utc.astimezone(self.timezone)
+        return local.isoweekday() in self.local_weekdays and local.hour in self.local_hours
 
 
 @dataclass(frozen=True)

@@ -23,7 +23,7 @@ Two repos:
 Pure-stdlib runtime; pytest via the Nix flake. **`pytest` is not on the global PATH** — always:
 ```sh
 cd ~/Projects/energy-sim
-nix develop --command pytest tests/        # 85 tests, green
+nix develop --command pytest tests/        # 88 tests, green
 nix develop --command python -m energy_sim {export,cost-report,validate} ...
 ```
 
@@ -31,13 +31,13 @@ nix develop --command python -m energy_sim {export,cost-report,validate} ...
 
 ```
 THE NUMBER — modelled net cost vs what Aurora actually billed:
-  as measured   modelled $178.43  actual $180.91  Δ -$2.47  -1.4%
-  CT-calibrated modelled $181.64  actual $180.91  Δ +$0.73  +0.4%
+  as measured   modelled $179.48  actual $180.91  Δ -$1.43  -0.8%
+  CT-calibrated modelled $182.71  actual $180.91  Δ +$1.80  +1.0%
   CT calibration: import x1.027   export x1.071
 
 Check 1 — rate/formula in isolation:  all four legs PASS at $0.00 delta
   (peak $58.52, off-peak $84.34, export credit $7.31, supply $45.35)
-Check 2 — peak-window classifier:     683/710 hours agree, 27 disagree  <-- see open finding
+Check 2 — peak-window classifier:     710/710 hours agree, 0 disagree
 ```
 
 Reproduce:
@@ -47,25 +47,22 @@ nix develop --command python -m energy_sim cost-report --in data/energy_hourly_2
 nix develop --command python -m energy_sim validate  --in data/energy_hourly_2026-06.csv
 ```
 
-## THE ONE OPEN DECISION (awaiting the user)
+## The peak-window bug (FIXED — R1.2)
 
-The peak-window rule applies its **Mon–Fri test to the UTC date**, while its 21:00–24:00Z block
-belongs to the **next local day**. All 27 classifier mismatches are this single error:
+The peak-window rule used to apply its **Mon–Fri test to the UTC date** while its 21:00–24:00Z
+block belongs to the **next local day**. All 27 June classifier mismatches were this one error:
 
-| UTC slot | is locally | we charge | Aurora charges |
+| UTC slot | is locally | we charged | Aurora charges |
 |---|---|---|---|
 | Fri 21–24Z (x4/mo) | Sat 07–10 | peak | off-peak |
 | Sun 21–24Z (x5/mo) | Mon 07–10 | off-peak | peak |
 
-Worth **-$1.05** on the June bill (we *under*-charge), so fixing it moves the headline residual
-from +$0.73 to roughly +$1.8 — the model gets more correct and the number gets slightly worse.
+Now evaluated in `Australia/Hobart` (`[peak_window]` is `timezone` + `local_weekdays` +
+`local_hours`), which also retires the DST caveat R1 deferred. Classifier went to **710/710**.
+The model had been *under*-charging by $1.05, so the headline residual moved slightly further
+over — correctness was preferred to the flattering number.
 
-Fixing it means evaluating the window in `Australia/Hobart` instead of fixed UTC hours, which
-also resolves the DST caveat R1 deferred — but **diverges from `powerflow.yml`**, which has the
-identical bug and would need the same fix + a redeploy. R1 explicitly listed the DST-aware peak
-window as out of scope, which is why this was left alone rather than just fixed.
-
-## What's built (energy-sim) — DDD, TDD, 85 tests green
+## What's built (energy-sim) — DDD, TDD, 88 tests green
 
 ```
 src/energy_sim/
@@ -163,7 +160,5 @@ them. With these in place all four rate legs validate at **$0.00** delta.
 
 ## Not done
 
-- The open classifier decision above.
 - `HomeAssistantConfig/scripts/aurora_import.py` is still uncommitted in that repo.
-- `infra/vmalert/powerflow.yml` still carries the UTC-weekday peak-window bug (and its own copy
-  of the two wrong tariff rates — worth checking `pf:import_rate_c_kwh` against 35.4782/16.6862).
+- The energy-balance signal (16 June intervals over 0.01 kWh) is unexplained.

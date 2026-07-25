@@ -75,7 +75,7 @@ CT paths). Solar and load are not scaled — Aurora gives no ground truth for th
 **Still out of scope.** Battery; per-device disaggregation; DST-aware peak window — but see the
 open finding below, which is no longer just a DST question.
 
-**Open finding (not fixed — crosses R1's stated scope boundary).** The peak-window rule applies
+**Open finding (→ resolved in R1.2).** The peak-window rule applies
 its Mon–Fri test to the **UTC** date, while its 21:00–24:00Z block belongs to the *next local
 day*. Over June 2026 this misclassifies 27 hours, all of one shape: UTC-Friday 21–24Z is
 Saturday morning locally (charged peak, should be off-peak) and UTC-Sunday 21–24Z is Monday
@@ -87,6 +87,35 @@ from `infra/vmalert/powerflow.yml`, which has the same bug and would need the sa
 **Capability delivered.** `validate` reports, for a billing month: four rate legs against
 Aurora's billed dollars, the peak-window classifier's agreement, the CT calibration factors, and
 the modelled-vs-billed dollar total both as measured and calibrated.
+
+---
+
+## R1.2 — Peak window evaluated in local billing time (current)
+
+**Requirement.** Classify peak/off-peak in the **billing timezone** (`Australia/Hobart`), the way
+Aurora bills it — local Mon–Fri, 7–10am and 4–9pm — rather than as fixed UTC hours.
+
+**Supersedes:** R1's "DST-aware peak window" out-of-scope line, and R1.1's open finding. The
+deferral assumed this was only a DST refinement; it was also a plain misclassification bug
+independent of DST, proven by Aurora's own hourly split.
+
+**What was wrong.** The fixed-UTC form applied its Mon–Fri test to the **UTC** date while its
+21:00–24:00Z block belongs to the *next local day*. UTC-Friday 21–24Z is Saturday morning locally
+(charged peak, billed off-peak); UTC-Sunday 21–24Z is Monday morning locally (charged off-peak,
+billed peak). Separately, the fixed offset ignored DST, putting both blocks an hour out for the
+half of the year Tasmania is on AEDT.
+
+**Config shape changed.** `[peak_window]` is now `timezone` + `local_weekdays` (ISO, Mon=1..Sun=7)
++ `local_hours`, replacing `utc_weekdays`/`utc_hours`.
+
+**Result.** The classifier goes from 683/710 to **710/710 hours agreeing** with Aurora — every
+mismatch was this one bug. The model was *under*-charging, so the June headline moves from -1.4%
+to **-0.8%** as measured, and from +0.4% to **+1.0%** calibrated: more correct, and slightly
+further over. Correctness was preferred to the flattering number.
+
+**Deliberate divergence.** `infra/vmalert/powerflow.yml` carries the identical bug in `pf:is_peak`.
+Aurora's billed data is the ground truth, not the metrics layer, so the sim was fixed first and
+powerflow.yml brought into line separately.
 
 ---
 

@@ -5,6 +5,7 @@ FY2025-26: peak 31.948, off-peak 14.876, FiT 8.782 c/kWh; June 2026 supply is 0 
 """
 from datetime import date, datetime, timezone
 from decimal import Decimal
+from zoneinfo import ZoneInfo
 
 from energy_sim.application.cost_calculator import CostCalculatorService
 from energy_sim.domain.energy import EnergyQuantity
@@ -16,8 +17,9 @@ from energy_sim.domain.tariff import PeakWindow, Tariff, TariffPeriod
 
 UTC = timezone.utc
 
-PEAK_WINDOW = PeakWindow(utc_weekdays=frozenset({1, 2, 3, 4, 5}),
-                         utc_hours=frozenset({6, 7, 8, 9, 10, 21, 22, 23}))
+PEAK_WINDOW = PeakWindow(timezone=ZoneInfo("Australia/Hobart"),
+                         local_weekdays=frozenset({1, 2, 3, 4, 5}),
+                         local_hours=frozenset({7, 8, 9, 16, 17, 18, 19, 20}))
 FY2025 = TariffPeriod(valid_from=date(2025, 7, 1), peak_c_kwh=Decimal("31.948"),
                       offpeak_c_kwh=Decimal("14.876"), export_c_kwh=Decimal("8.782"),
                       supply_c_day=Decimal("0.0"))

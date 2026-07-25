@@ -10,6 +10,7 @@ import tomllib
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from energy_sim.domain.tariff import PeakWindow, Tariff, TariffPeriod
 
@@ -35,7 +36,8 @@ def load_tariff(path: str | Path) -> Tariff:
 
     window = data["peak_window"]
     peak_window = PeakWindow(
-        utc_weekdays=frozenset(window["utc_weekdays"]),
-        utc_hours=frozenset(window["utc_hours"]),
+        timezone=ZoneInfo(window["timezone"]),
+        local_weekdays=frozenset(window["local_weekdays"]),
+        local_hours=frozenset(window["local_hours"]),
     )
     return Tariff(periods=periods, peak_window=peak_window)
