@@ -40,4 +40,9 @@ def load_tariff(path: str | Path) -> Tariff:
         local_weekdays=frozenset(window["local_weekdays"]),
         local_hours=frozenset(window["local_hours"]),
     )
-    return Tariff(periods=periods, peak_window=peak_window)
+    billing_tz = data.get("billing", {}).get("timezone")
+    return Tariff(
+        periods=periods,
+        peak_window=peak_window,
+        billing_timezone=ZoneInfo(billing_tz) if billing_tz else None,
+    )

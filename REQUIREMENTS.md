@@ -190,6 +190,50 @@ between the CT stream and Aurora's own meter integration. This is the next thing
 
 ---
 
+## R1.5 — The peak window is fixed AEST; validate the whole series (current)
+
+**Requirement.** Validate every month on record, not one. A single month can be right by
+coincidence — two compensating errors cancelling — which had already happened twice here (R1.3,
+R1.4). The sweep lives in `scripts/validate_all_months.py`.
+
+**What the sweep found immediately.** Winter months were near-perfect while every summer month was
+badly out (-16.9%, -14.7%, -10.6%, -7.3%), and classifier agreement collapsed in exactly those
+months (496/549) while winter held at 730/730. One shape, one cause.
+
+**Aurora prices the ToU window on FIXED AEST (UTC+10), year-round.** It does not follow daylight
+saving. Verified against Aurora's own billed split: in January 2026 its peak kWh land on local
+(AEDT) hours 8-10 and 17-21 — exactly 7-9 and 16-20 in AEST. R1.2 was therefore half right: fixing
+the weekday frame was necessary, but making the window DST-aware was wrong, and invisible in
+winter because AEST and local time coincide there.
+
+Equivalently the window is UTC hours {6,7,8,9,10,21,22,23} all year — the hour set powerflow.yml
+always had. Its only bug was testing Mon-Fri against the UTC date.
+
+**Aurora uses two different clocks, and the model now does too:**
+- **billing days** — local calendar days, DST-aware (its daily records are stamped 13:00Z in AEDT,
+  14:00Z in AEST). `[billing] timezone = "Australia/Hobart"`.
+- **ToU window** — fixed AEST. `[peak_window] timezone = "Etc/GMT-10"`.
+
+**Earlier tariff periods recovered.** FY2023-24 and FY2024-25 rates were unknown, which blocked
+validation before 2025-08. Recovered by the same method (median of daily billed $ / metered kWh),
+which reproduces FY2025-26 and FY2026-27 *exactly* from data — that is what validates it.
+
+**Result — 32 months, 2023-11 to 2026-06, $2,302.22 billed:**
+
+| | |
+|---|---|
+| as measured | -$11.56 (**-0.50%**) |
+| CT-calibrated | **-$1.59 (-0.07%)** |
+| classifier | **100% agreement in every month** |
+
+**Caveats worth keeping.** Percentage error is meaningless on near-zero months: 2025-02 reads
++31.9% on a **-$0.71** net-credit bill (a 23-cent error). Several winter months show absurd export
+calibration factors (2025-06 at x8.7) — pf:* export is far below Aurora's metered export when
+there is almost none to measure. Both are reporting artefacts, not model error; a dollar-weighted
+view is the honest one.
+
+---
+
 ## R2 — Battery what-if (planned, not built)
 
 **Requirement (anticipated).** Given a hypothetical home battery (capacity, power, round-trip

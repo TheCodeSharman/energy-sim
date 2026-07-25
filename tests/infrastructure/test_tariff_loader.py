@@ -25,3 +25,15 @@ def test_peak_window_parsed_from_config():
     # Saturday is never peak; Monday 06:00 UTC is.
     assert tariff.is_peak(datetime(2026, 6, 6, 6, 0, tzinfo=UTC)) is False
     assert tariff.is_peak(datetime(2026, 6, 1, 6, 0, tzinfo=UTC)) is True
+
+
+def test_peak_window_is_fixed_aest_not_dst_aware():
+    # Aurora prices the ToU window on AEST year-round; a summer timestamp discriminates.
+    tariff = load_tariff(CONFIG)
+    assert tariff.is_peak(datetime(2026, 1, 6, 21, 0, tzinfo=UTC)) is True   # 07:00 AEST
+    assert tariff.is_peak(datetime(2026, 1, 6, 20, 0, tzinfo=UTC)) is False  # 06:00 AEST
+
+
+def test_billing_days_are_dst_aware_even_though_the_window_is_not():
+    tariff = load_tariff(CONFIG)
+    assert tariff.billing_timezone.key == "Australia/Hobart"

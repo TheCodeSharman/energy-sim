@@ -56,16 +56,25 @@ class TariffPeriod:
 class Tariff:
     """A time-of-use tariff: ordered rate periods plus a peak-window rule."""
 
-    def __init__(self, periods: list[TariffPeriod], peak_window: PeakWindow) -> None:
+    def __init__(
+        self,
+        periods: list[TariffPeriod],
+        peak_window: PeakWindow,
+        billing_timezone: tzinfo | None = None,
+    ) -> None:
         if not periods:
             raise ValueError("Tariff requires at least one period")
         self._periods = sorted(periods, key=lambda p: p.valid_from)
         self._peak_window = peak_window
+        # Aurora uses TWO clocks: billing days are local calendar days (DST-aware), while the
+        # time-of-use window is priced on fixed AEST year-round. Defaults to the window's clock
+        # so a tariff without daily charges needs no extra argument.
+        self._billing_timezone = billing_timezone or peak_window.timezone
 
     @property
     def billing_timezone(self) -> tzinfo:
-        """The timezone Aurora bills in — both the peak window and the daily supply charge."""
-        return self._peak_window.timezone
+        """The zone whose calendar days the fixed daily charge is billed on (DST-aware)."""
+        return self._billing_timezone
 
     def is_peak(self, dt_utc: datetime) -> bool:
         return self._peak_window.contains(dt_utc)

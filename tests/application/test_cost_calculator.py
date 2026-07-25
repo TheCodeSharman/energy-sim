@@ -87,3 +87,22 @@ def test_supply_charge_counts_local_billing_days_not_utc_dates():
         grid.add_import(_imp(datetime(2026, 5, 31, 14, 0, tzinfo=UTC) + timedelta(hours=hour), 0.0))
     breakdown = CostCalculatorService().calculate(Site(name="Home", grid=grid), SUPPLY_TARIFF)
     assert breakdown.supply_charge == Money.from_dollars("1.00")
+
+
+def test_supply_days_follow_the_billing_zone_even_though_the_window_does_not():
+    """Aurora uses two different clocks, and the model must too.
+
+    Billing DAYS are local calendar days (its daily records are stamped 13:00Z in AEDT and
+    14:00Z in AEST), but the ToU WINDOW is priced on fixed AEST year-round. A summer day
+    discriminates: 2026-01-15 Hobart runs 13:00Z-13:00Z, which straddles two UTC+10 dates.
+    """
+    grid = GridConnection(name="Aurora meter")
+    for hour in range(24):  # all of 2026-01-15, Hobart local
+        grid.add_import(_imp(datetime(2026, 1, 14, 13, 0, tzinfo=UTC) + timedelta(hours=hour), 0.0))
+    tariff = Tariff(
+        periods=SUPPLY_TARIFF._periods,
+        peak_window=PEAK_WINDOW,
+        billing_timezone=ZoneInfo("Australia/Hobart"),
+    )
+    breakdown = CostCalculatorService().calculate(Site(name="Home", grid=grid), tariff)
+    assert breakdown.supply_charge == Money.from_dollars("1.00")

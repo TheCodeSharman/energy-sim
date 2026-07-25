@@ -14,9 +14,10 @@ from energy_sim.domain.tariff import PeakWindow, Tariff, TariffPeriod
 
 UTC = timezone.utc
 HOBART = ZoneInfo("Australia/Hobart")
+AEST = ZoneInfo("Etc/GMT-10")  # fixed UTC+10, no DST — the clock Aurora prices on
 
 # Standard Aurora Tariff 93 peak window (ISO weekdays: Mon=1..Sun=7).
-PEAK_WINDOW = PeakWindow(timezone=HOBART,
+PEAK_WINDOW = PeakWindow(timezone=AEST,
                          local_weekdays=frozenset({1, 2, 3, 4, 5}),
                          local_hours=frozenset({7, 8, 9, 16, 17, 18, 19, 20}))
 
@@ -65,10 +66,23 @@ def test_saturday_morning_is_offpeak_despite_being_friday_in_utc():
     assert PEAK_WINDOW.contains(datetime(2026, 6, 5, 21, 0, tzinfo=UTC)) is False
 
 
-def test_morning_block_shifts_an_hour_under_daylight_saving():
-    # In AEDT (UTC+11) local 07:00 Tue sits at 20:00 UTC, an hour earlier than in AEST.
-    assert PEAK_WINDOW.contains(datetime(2027, 1, 4, 19, 0, tzinfo=UTC)) is False  # 06:00 AEDT
-    assert PEAK_WINDOW.contains(datetime(2027, 1, 4, 20, 0, tzinfo=UTC)) is True   # 07:00 AEDT
+def test_the_window_does_not_shift_under_daylight_saving():
+    """Aurora prices Tariff 93 on AEST year-round, so the window stays put in summer.
+
+    Verified against Aurora's own billed split for January 2026: peak kWh land on local
+    (AEDT) hours 8-10 and 17-21, which is exactly 7-9 and 16-20 in fixed AEST. A DST-aware
+    window would put them an hour early and misprice roughly 10% of summer hours.
+    """
+    # 2027-01-05 is a Tuesday. 20:00Z is 07:00 AEDT but only 06:00 AEST -> NOT peak.
+    assert PEAK_WINDOW.contains(datetime(2027, 1, 4, 20, 0, tzinfo=UTC)) is False
+    # 21:00Z is 08:00 AEDT = 07:00 AEST -> peak, same UTC hour as in winter.
+    assert PEAK_WINDOW.contains(datetime(2027, 1, 4, 21, 0, tzinfo=UTC)) is True
+
+
+def test_peak_window_occupies_the_same_utc_hours_all_year():
+    winter = {h for h in range(24) if PEAK_WINDOW.contains(datetime(2026, 6, 3, h, tzinfo=UTC))}
+    summer = {h for h in range(24) if PEAK_WINDOW.contains(datetime(2026, 1, 7, h, tzinfo=UTC))}
+    assert winter == summer == {6, 7, 8, 9, 10, 21, 22, 23}
 
 
 # --- Tariff period selection & rates -----------------------------------------
