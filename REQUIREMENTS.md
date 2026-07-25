@@ -119,6 +119,36 @@ powerflow.yml brought into line separately.
 
 ---
 
+## R1.3 — Supply charge is billed per local day (current)
+
+**Requirement.** Charge the fixed daily supply charge once per **local billing day**, not once
+per distinct UTC date.
+
+**Why it surfaced.** After R1.2, the CT-calibrated residual (+$1.80) was *larger* than the
+as-measured one (-$1.43), which is backwards: calibration removes a known error, so it should
+improve the estimate. Decomposing the calibrated residual explained it exactly:
+
+| source | amount |
+|---|---|
+| peak/off-peak misallocation (1.55 kWh of 670) | +$0.29 |
+| **one extra supply day** | **+$1.51** |
+| total | +$1.80 |
+
+A 30-day local billing month spans **31 distinct UTC dates**, so counting UTC dates billed one
+day too many — every month, for any period. R1's `_supply_charge` noted the UTC-date shortcut as
+harmless "because supply is $0/unknown for the validation month"; R1.1 recovered the supply
+charge as 151.1814 c/day, which silently invalidated that caveat.
+
+**The as-measured number had been flattered.** The CT under-read (too low) was partly cancelling
+this overcharge (too high). Removing one error exposed the other — which is exactly what the
+two-line report in R1.1 is for.
+
+**Result.** June 2026 goes from -1.6% as measured to **+0.2%** calibrated — calibration now
+improves the estimate ~8x, as it should. The remaining +$0.29 is entirely the peak/off-peak
+allocation of energy across hour boundaries, the only error left in the model.
+
+---
+
 ## R2 — Battery what-if (planned, not built)
 
 **Requirement (anticipated).** Given a hypothetical home battery (capacity, power, round-trip

@@ -62,6 +62,11 @@ class Tariff:
         self._periods = sorted(periods, key=lambda p: p.valid_from)
         self._peak_window = peak_window
 
+    @property
+    def billing_timezone(self) -> tzinfo:
+        """The timezone Aurora bills in — both the peak window and the daily supply charge."""
+        return self._peak_window.timezone
+
     def is_peak(self, dt_utc: datetime) -> bool:
         return self._peak_window.contains(dt_utc)
 

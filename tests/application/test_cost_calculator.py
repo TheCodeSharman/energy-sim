@@ -3,7 +3,7 @@
 Uses the real Tariff and real Site/GridConnection (no mocks). Rates are Aurora Tariff 93
 FY2025-26: peak 31.948, off-peak 14.876, FiT 8.782 c/kWh; June 2026 supply is 0 (unknown).
 """
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
@@ -64,3 +64,26 @@ def test_peak_offpeak_import_split():
     breakdown = CostCalculatorService().calculate(_site(), TARIFF)
     assert breakdown.peak_import_kwh == 2.0
     assert breakdown.offpeak_import_kwh == 1.0
+
+
+# --- supply charge is billed per LOCAL day, not per UTC date ------------------
+
+SUPPLY_TARIFF = Tariff(
+    periods=[TariffPeriod(valid_from=date(2025, 7, 1), peak_c_kwh=Decimal("35.4782"),
+                          offpeak_c_kwh=Decimal("16.6862"), export_c_kwh=Decimal("8.782"),
+                          supply_c_day=Decimal("100.0"))],
+    peak_window=PEAK_WINDOW,
+)
+
+
+def test_supply_charge_counts_local_billing_days_not_utc_dates():
+    """One local day (2026-06-01 Hobart) spans two UTC dates — Aurora bills it once.
+
+    Counting UTC dates overcharges a month by a whole day: a 30-day local billing month
+    covers 31 distinct UTC dates.
+    """
+    grid = GridConnection(name="Aurora meter")
+    for hour in range(24):  # 2026-05-31T14:00Z .. 2026-06-01T13:00Z = all of 1 June, Hobart
+        grid.add_import(_imp(datetime(2026, 5, 31, 14, 0, tzinfo=UTC) + timedelta(hours=hour), 0.0))
+    breakdown = CostCalculatorService().calculate(Site(name="Home", grid=grid), SUPPLY_TARIFF)
+    assert breakdown.supply_charge == Money.from_dollars("1.00")

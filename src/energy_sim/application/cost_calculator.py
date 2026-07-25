@@ -6,7 +6,7 @@ GridConnection, which is why it lives here rather than in the CLI.
 """
 from __future__ import annotations
 
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, tzinfo
 from decimal import Decimal
 
 from energy_sim.domain.cost import CostBreakdown
@@ -45,18 +45,21 @@ class CostCalculatorService:
 
     @staticmethod
     def _supply_charge(site: Site, tariff: Tariff) -> Money:
-        """Sum the daily supply charge over each distinct UTC calendar date in the data.
+        """Sum the daily supply charge over each distinct LOCAL billing day in the data.
 
-        (UTC-date approximation; supply is $0/unknown for the FY2025-26 validation month,
-        so this does not affect iteration-1 validation. See config/tariffs.toml.)
+        Aurora bills the fixed charge per local calendar day. Counting UTC dates instead
+        overcharges by exactly one day per month, because a 30-day local billing month spans
+        31 distinct UTC dates — worth $1.51 on June 2026, which is most of what was left of
+        that month's residual once CT bias was calibrated out.
         """
-        dates = {gi.ts_utc.date() for gi in site.grid.intervals()}
+        tz = tariff.billing_timezone
+        dates = {gi.ts_utc.astimezone(tz).date() for gi in site.grid.intervals()}
         total = Money.zero()
         for d in dates:
-            total += Money.from_cents(tariff.supply_charge_per_day(_utc_midday(d)))
+            total += Money.from_cents(tariff.supply_charge_per_day(_local_midday(d, tz)))
         return total
 
 
-def _utc_midday(d: date) -> datetime:
-    """A UTC datetime inside calendar date ``d``, for period/rate lookup by date."""
-    return datetime.combine(d, time(12, 0), tzinfo=timezone.utc)
+def _local_midday(d: date, tz: tzinfo) -> datetime:
+    """A datetime inside local calendar date ``d``, for period/rate lookup by date."""
+    return datetime.combine(d, time(12, 0), tzinfo=tz)
