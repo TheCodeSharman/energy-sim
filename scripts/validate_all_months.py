@@ -34,7 +34,7 @@ def months(first: str, last: str) -> list[str]:
     return out
 
 
-def main() -> None:
+def main() -> int:
     first, last = sys.argv[1], sys.argv[2]
     outdir = Path(__file__).resolve().parents[1] / "data" / "months"
     outdir.mkdir(parents=True, exist_ok=True)
@@ -76,7 +76,8 @@ def main() -> None:
             print(f"{month:9} error: {type(exc).__name__}: {exc}")
 
     if not rows_out:
-        return
+        print("\n  *** No month produced a result. This is a failure, not an empty record. ***")
+        return 1
     billed = sum(r[1] for r in rows_out)
     raw = sum(r[2] for r in rows_out)
     cal = sum(r[3] for r in rows_out)
@@ -91,9 +92,13 @@ def main() -> None:
     if failed:
         # A partial sweep that prints a confident total is worse than one that fails loudly:
         # a transient export error once silently turned 32 months into 29 and $2,302 into $1,817.
+        # Reads are retried inside the VM client now, so anything still here is not transient —
+        # and it exits non-zero, because printing the warning was not enough on its own.
         print(f"\n  *** INCOMPLETE: {len(failed)} month(s) failed and are NOT in the totals above "
               f"({', '.join(failed)}). Re-run before trusting these numbers. ***")
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

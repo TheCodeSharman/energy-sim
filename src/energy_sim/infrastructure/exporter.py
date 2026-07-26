@@ -59,10 +59,13 @@ def assemble_rows(
     kwh = {name: dict(series) for name, series in aurora_kwh.items()}
 
     def kwh_from_watts(name: str, ts: datetime) -> float | None:
-        series = p.get(name, {})
-        if not series:
-            return None  # series absent entirely (e.g. solar not queried)
-        watts = series.get(ts, 0.0)  # gap within a present series -> zero
+        # No sample means nothing measured this interval — whether the series is absent
+        # entirely or merely has a hole here. Filling the hole with 0.0 would record "0 kWh
+        # imported" as a measurement, which is how a coverage gap turns into an apparent
+        # energy imbalance. Unknown stays unknown.
+        watts = p.get(name, {}).get(ts)
+        if watts is None:
+            return None
         return EnergyQuantity.from_average_watts(watts, step_seconds).kwh
 
     row_timestamps = sorted(set(p.get("import", {})) | set(p.get("export", {}))
@@ -75,8 +78,8 @@ def assemble_rows(
         rows.append(SnapshotRow(
             ts_utc=ts,
             interval_s=step_seconds,
-            grid_import_kwh=kwh_from_watts("import", ts) or 0.0,
-            grid_export_kwh=kwh_from_watts("export", ts) or 0.0,
+            grid_import_kwh=kwh_from_watts("import", ts),
+            grid_export_kwh=kwh_from_watts("export", ts),
             solar_kwh=kwh_from_watts("solar", ts),
             consumption_kwh=kwh_from_watts("consumption", ts),
             aurora_kwh_peak=kwh.get("peak", {}).get(ts),

@@ -32,8 +32,11 @@ COLUMNS = [
 class SnapshotRow:
     ts_utc: datetime
     interval_s: int
-    grid_import_kwh: float
-    grid_export_kwh: float
+    # All four flows are optional: a blank means the source had no reading for this interval,
+    # which is not the same claim as "zero". Cost treats a blank as no energy, but only after
+    # the row has said, honestly, that nothing was measured. See ``incomplete_rows``.
+    grid_import_kwh: float | None
+    grid_export_kwh: float | None
     solar_kwh: float | None
     consumption_kwh: float | None
     # Aurora kWh are hourly (peak/off-peak/export). Aurora dollars are DAILY totals placed on
@@ -86,8 +89,8 @@ def read_snapshot(path: str | Path) -> "Snapshot":
             rows.append(SnapshotRow(
                 ts_utc=datetime.strptime(rec["timestamp_utc"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc),
                 interval_s=int(rec["interval_s"]),
-                grid_import_kwh=float(rec["grid_import_kwh"]),
-                grid_export_kwh=float(rec["grid_export_kwh"]),
+                grid_import_kwh=_num(rec["grid_import_kwh"]),
+                grid_export_kwh=_num(rec["grid_export_kwh"]),
                 solar_kwh=_num(rec["solar_kwh"]),
                 consumption_kwh=_num(rec["consumption_kwh"]),
                 aurora_kwh_peak=_num(rec["aurora_kwh_peak"]),
@@ -127,11 +130,28 @@ class Snapshot:
     def _has_solar_load(self) -> bool:
         return any(r.solar_kwh is not None and r.consumption_kwh is not None for r in self.rows)
 
+    _FLOW_FIELDS = ("grid_import_kwh", "grid_export_kwh", "solar_kwh", "consumption_kwh")
+
+    def incomplete_rows(self) -> list[SnapshotRow]:
+        """Rows where at least one flow was measured and at least one was not.
+
+        These are intervals assembled from partial source coverage. They are not an error —
+        the sources really do have holes — but any total over them is short by an unknown
+        amount, so the number of them belongs in the output rather than in a comment.
+        """
+        return [r for r in self.rows if self._is_incomplete(r)]
+
+    def _is_incomplete(self, row: SnapshotRow) -> bool:
+        present = [getattr(row, f) is not None for f in self._FLOW_FIELDS]
+        return any(present) and not all(present)
+
     def to_site(self, name: str = "Home") -> Site:
         grid = GridConnection(name="Aurora meter")
         for r in self.rows:
-            grid.add_import(_reading(r.ts_utc, r.interval_s, r.grid_import_kwh))
-            grid.add_export(_reading(r.ts_utc, r.interval_s, r.grid_export_kwh))
+            # An unmeasured interval contributes no energy: we cannot bill for a reading that
+            # does not exist. ``incomplete_rows`` is how that shows up in the output.
+            grid.add_import(_reading(r.ts_utc, r.interval_s, r.grid_import_kwh or 0.0))
+            grid.add_export(_reading(r.ts_utc, r.interval_s, r.grid_export_kwh or 0.0))
 
         solar = load = None
         if self._has_solar_load():
@@ -174,10 +194,10 @@ class Snapshot:
         return self._sum("aurora_kwh_export")
 
     def pf_import_kwh_total(self) -> float:
-        return sum(r.grid_import_kwh for r in self.rows)
+        return self._sum("grid_import_kwh")
 
     def pf_export_kwh_total(self) -> float:
-        return sum(r.grid_export_kwh for r in self.rows)
+        return self._sum("grid_export_kwh")
 
     def _sum(self, field_name: str) -> float:
         return sum(getattr(r, field_name) or 0.0 for r in self.rows)

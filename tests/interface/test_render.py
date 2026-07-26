@@ -9,7 +9,12 @@ from energy_sim.application.validation import (
 )
 from energy_sim.domain.cost import CostBreakdown
 from energy_sim.domain.money import Money
-from energy_sim.interface.cli import render_cost_report, render_validation
+from energy_sim.infrastructure.csv_store import SnapshotRow
+from energy_sim.interface.cli import (
+    render_cost_report,
+    render_export_summary,
+    render_validation,
+)
 
 UTC = timezone.utc
 
@@ -62,3 +67,33 @@ def test_validation_flags_missing_aurora():
                               classifier=ClassifierResult(0, 0, []), end_to_end=None)
     text = render_validation(report, tolerance_cents=1.0)
     assert "no Aurora" in text.lower() or "cannot validate" in text.lower()
+
+
+# --- export summary: say what the snapshot does NOT contain --------------------
+
+def _flow_row(ts, grid_import, solar):
+    return SnapshotRow(ts_utc=ts, interval_s=3600,
+                       grid_import_kwh=grid_import, grid_export_kwh=0.0,
+                       solar_kwh=solar, consumption_kwh=solar,
+                       aurora_kwh_peak=None, aurora_kwh_offpeak=None, aurora_kwh_export=None,
+                       aurora_dollar_peak=None, aurora_dollar_offpeak=None,
+                       aurora_dollar_export=None)
+
+
+T0 = datetime(2026, 6, 1, 5, 0, tzinfo=UTC)
+T1 = datetime(2026, 6, 1, 6, 0, tzinfo=UTC)
+
+
+def test_export_summary_reports_totals():
+    summary = render_export_summary([_flow_row(T0, 1.0, 0.5)], "june.csv", 3600)
+    assert "1 rows" in summary and "import 1.0 kWh" in summary
+
+
+def test_export_summary_names_the_intervals_built_from_partial_coverage():
+    rows = [_flow_row(T0, 1.0, None), _flow_row(T1, 2.0, 0.5)]
+    assert "1 interval(s) with incomplete" in render_export_summary(rows, "june.csv", 3600)
+
+
+def test_export_summary_stays_quiet_when_coverage_is_complete():
+    rows = [_flow_row(T0, 1.0, 0.5), _flow_row(T1, 2.0, 0.5)]
+    assert "incomplete" not in render_export_summary(rows, "june.csv", 3600)
