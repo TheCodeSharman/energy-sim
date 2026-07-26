@@ -2,21 +2,8 @@
 
 Rates are c/kWh (Decimal); supply is c/day.
 
-The peak window is evaluated in the BILLING TIMEZONE, because that is how Aurora bills it:
-local Mon-Fri, 7-10am and 4-9pm. `infra/vmalert/powerflow.yml` instead encodes it as fixed
-UTC hours (Mon-Fri, [6,11) union [21,24)), which is wrong twice over:
-
-  * The weekday test lands on the UTC date, but the 21:00-24:00Z block is the NEXT local day.
-    So UTC-Friday 21-24Z is Saturday morning locally (billed off-peak, charged peak) and
-    UTC-Sunday 21-24Z is Monday morning locally (billed peak, charged off-peak). Over June
-    2026 this misclassified 27 hours — every single classifier mismatch against Aurora's own
-    hourly split, and worth -$1.05 on that month's bill.
-  * The fixed offset ignores daylight saving, so both blocks sit an hour off for the ~half of
-    the year Tasmania is on AEDT.
-
-Evaluating in the billing timezone fixes both. This deliberately diverges from powerflow.yml
-until the same fix is applied there; Aurora's billed data is the ground truth, not the metrics
-layer.
+The peak window is evaluated on FIXED AEST and the daily supply charge on local calendar
+days — Aurora uses two different clocks. See docs/aurora-data.md.
 """
 from __future__ import annotations
 

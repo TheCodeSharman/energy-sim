@@ -3,42 +3,55 @@
 A home energy-cost / scenario simulator built on the cleaned power-flow data from the
 `HomeAssistantConfig` project (VictoriaMetrics `pf:*` layer + Aurora Plus billed data).
 
-**Iteration 1 (current):** replay real grid import/export, compute the Aurora Tariff 93 cost,
-and validate it against the actual Aurora Plus billed dollars. Whole-home only — no per-device
-disaggregation, no battery yet.
+Replays real grid import/export, computes the Aurora Tariff 93 cost, and validates it against the
+dollars Aurora actually billed. Whole-home only — no per-device disaggregation, no battery.
 
-The design is DDD-structured (a `Site` aggregate root owning a device topology) so later
-iterations — battery economics first (see `REQUIREMENTS.md`), then EV / hot-water / heat-pump
-modelling — add a `Device` subtype rather than restructure.
-
-See `REQUIREMENTS.md` for the incremental requirements log (this project doubles as a repeatable
-AI-assisted-codegen experiment: each requirement change is recorded so the build can be replayed).
+The design is DDD-structured (a `Site` aggregate root owning a device topology) so later scenarios
+add a `Device` subtype rather than restructure.
 
 ## Dev environment
 
 Pure-stdlib runtime; `pytest` for tests, provided by the Nix flake:
 
 ```sh
-nix develop            # enters a shell with python3 + pytest; sets PYTHONPATH=./src
+nix develop            # python3 + pytest; sets PYTHONPATH=./src
 pytest                 # run the test suite
 ```
 
-## Data
+## Usage
 
-Aurora billing / `pf:*` power flows live in VictoriaMetrics at `http://192.168.88.152:8428`
-(reachable from the dev box). The simulator snapshots a period to a committed CSV under `data/`
-for reproducible runs, then computes/validates against that snapshot.
+Snapshot a period to CSV, then compute and validate against that snapshot, so runs are
+reproducible:
 
 ```sh
-python -m energy_sim export --month 2026-06 --out data/energy_hourly_2026-06.csv   # default --step-seconds 3600
+python -m energy_sim export --month 2026-06 --out data/energy_hourly_2026-06.csv
 python -m energy_sim cost-report --in data/energy_hourly_2026-06.csv
-python -m energy_sim validate --in data/energy_hourly_2026-06.csv
+python -m energy_sim validate    --in data/energy_hourly_2026-06.csv
 ```
 
-Resolution is a parameter (`--step-seconds`); `300` gives a 5-min snapshot with no domain changes.
-Aurora ground truth is hourly, so validation buckets finer series up to 1h before comparing.
+Resolution is a parameter (`--step-seconds`, default 3600); `300` gives a 5-min snapshot with no
+domain changes. A correct model gives the same answer at every resolution — if two disagree, see
+[docs/timestamps.md](docs/timestamps.md).
 
-## Tariff constants
+To check the model against the whole record rather than one month:
 
-`config/tariffs.toml` is the authoritative copy of Aurora Tariff 93 rates (previously only in
-prose / un-versioned VM series). See that file for the FY periods, peak window, and data gaps.
+```sh
+python scripts/validate_all_months.py 2023-11 2026-06
+```
+
+Validate the **whole series**, not a single month. Compensating errors cancel: a winter month
+validated cleanly while the model was wrong for half of every year.
+
+## Docs
+
+- [docs/aurora-data.md](docs/aurora-data.md) — Aurora's two clocks, daily-vs-hourly cadence, billing months
+- [docs/timestamps.md](docs/timestamps.md) — the interval convention, and the resolution-drift symptom
+- [docs/tariffs.md](docs/tariffs.md) — recovering rates from the bill when published figures are wrong
+- `config/tariffs.toml` — the authoritative rates, periods and peak window
+- `REQUIREMENTS.md` — the incremental requirements log; this project doubles as a repeatable
+  AI-assisted-codegen experiment, so each requirement change is recorded to allow a replay
+
+## Data
+
+`pf:*` power flows and Aurora billing live in VictoriaMetrics on the home network, reachable from
+the dev box; `--vm-url` overrides the default.

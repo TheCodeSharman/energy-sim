@@ -1,20 +1,9 @@
-"""CT calibration — removing the household metering bias before judging the rate model.
+"""CT calibration — removing household metering bias before judging the rate model.
 
-The `pf:*` power flows come from household current transformers, which read ~7-16% low
-against Aurora's revenue meter. That bias would otherwise dominate the modelled-vs-billed
-dollar gap and hide whatever error belongs to the rate model itself.
-
-So we derive a scalar per direction straight from Aurora's own metered kWh:
-
-    import_factor = Aurora metered import kWh / pf:* import kWh
-    export_factor = Aurora metered export kWh / pf:* export kWh
-
-and re-cost a Site whose grid flows have been scaled by them. The residual that survives is
-rate/classifier/model error, with metering bias taken out.
-
-Import and export are scaled independently: they are different CT paths and are not observed
-to drift by the same amount. Solar and load carry through unscaled — they are metered by
-other CTs that Aurora gives us no ground truth for.
+The `pf:*` flows come from household CTs, which read low against Aurora's revenue meter.
+Scaling them onto Aurora's metered kWh separates metering error from rate-model error, so
+the validation report can show both. Import and export scale independently (different CT
+paths); solar and load are untouched, as Aurora gives no ground truth for them.
 """
 from __future__ import annotations
 

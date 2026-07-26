@@ -1,6 +1,7 @@
 """GridConnection — the metered grid connection point (import + export channels).
 
-The only device that drives cost in iteration 1. The Aurora smart meter is the billed
+The only device that drives cost: a tariff prices grid import and export, nothing else.
+The Aurora smart meter is the billed
 ground truth for this device. Import and export are separate measured channels (both >=0;
 a single interval can carry both), aligned by timestamp into ``GridInterval`` records.
 """

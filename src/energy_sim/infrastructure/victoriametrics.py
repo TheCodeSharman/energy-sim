@@ -1,15 +1,8 @@
 """VictoriaMetrics read client for /api/v1/query_range and /api/v1/export (stdlib urllib).
 
-Mirrors the write-side pattern in HomeAssistantConfig/scripts/*_import.py (plain urllib,
-host http://192.168.88.152:8428), but reads. The JSON parsing is pure so it can be
-unit-tested without a network; only the client methods touch IO.
-
-Two read paths, because the two Aurora cadences need different things:
-  * ``query_range`` — resampled onto a fixed step. Right for power flows and hourly series.
-  * ``export`` — the RAW samples at their own timestamps. Required for Aurora's DAILY dollars:
-    query_range at step<1d carries each daily value forward across every hour of the day
-    (staleness fill), so summing a month of it over-counts ~24x. Raw export gives exactly one
-    sample per day, which is what a monthly total needs.
+Two read paths: ``query_range`` resamples onto a fixed step, ``export`` returns the RAW
+samples. Aurora's daily dollars need ``export`` — see docs/aurora-data.md. Parsing is pure
+so it can be unit-tested without a network; only the client methods touch IO.
 """
 from __future__ import annotations
 

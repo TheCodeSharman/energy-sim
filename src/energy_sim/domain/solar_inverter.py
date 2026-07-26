@@ -1,5 +1,8 @@
-"""SolarInverter — PV generation. Represented in iteration 1 (energy-balance check +
-future use) but carries no economics yet."""
+"""SolarInverter — PV generation.
+
+Does not drive cost; only the grid connection does. Present so the energy identity
+`consumption = solar + import - export` can be asserted as a data-quality check.
+"""
 from __future__ import annotations
 
 from energy_sim.domain.device import DeviceRole, SingleMeterDevice

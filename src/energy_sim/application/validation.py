@@ -1,23 +1,14 @@
-"""ValidationService — the point of iteration 1: does the cost model match the Aurora bill?
+"""ValidationService — does the modelled cost match the Aurora bill?
 
-The target is a **dollar** figure: the modelled net cost of a month against the amount Aurora
-actually billed. Everything else here exists to explain the gap when it doesn't match.
+Reports three things, most-isolated first, so a discrepancy can be attributed:
+  1. rate legs — Aurora's own metered kWh x our rates vs its billed dollars (no CT or
+     classifier error in the way)
+  2. peak-window classifier — our is_peak(ts) vs which tariff Aurora billed each hour to
+  3. end-to-end dollars — modelled net cost from the pf:* flows vs the billed total, both
+     as measured and after CT calibration
 
-Checks, most-isolated first:
-  1. Rate/formula in isolation — Aurora's own metered kWh x our tariff rates, per leg (peak
-     import, off-peak import, export credit, daily supply), vs Aurora's billed dollars. Tests
-     the constants and the formula with no CT error and no classifier error in the way.
-  2. Peak-window classifier — our is_peak(ts) against which tariff Aurora billed each hour to
-     (a given hour is entirely peak or off-peak in Aurora's data). Tests the peak-window rule
-     independent of magnitude.
-  3. End-to-end (THE TARGET) — modelled net dollars from the pf:* grid flows against Aurora's
-     billed total, reported twice: once raw, and once after CT calibration. The raw residual is
-     dominated by the known ~7-16% CT under-read; the calibrated residual is what the rate model
-     itself gets wrong. See ``application/calibration.py``.
-
-Aurora's cadences differ and that shapes the arithmetic: kWh are hourly, dollars are DAILY.
-Both are summed over the period before comparing, so the comparison is a monthly total, not a
-per-interval one.
+kWh are hourly and dollars are daily, so both are summed over the period before comparing.
+See docs/aurora-data.md.
 """
 from __future__ import annotations
 

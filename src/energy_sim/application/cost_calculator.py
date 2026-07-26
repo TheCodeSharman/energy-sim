@@ -1,8 +1,8 @@
 """CostCalculatorService — the reusable cost seam.
 
 Costs a Site's GridConnection flows against a Tariff, per interval and independent of
-resolution. Iteration 2's battery scenario re-runs this same service on a battery-adjusted
-GridConnection, which is why it lives here rather than in the CLI.
+resolution. It lives here rather than in the CLI so a scenario can re-run the same costing
+over an adjusted GridConnection (e.g. a battery-adjusted series) without duplicating it.
 """
 from __future__ import annotations
 
