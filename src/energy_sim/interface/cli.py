@@ -13,7 +13,12 @@ from zoneinfo import ZoneInfo
 from energy_sim.application.cost_calculator import CostCalculatorService
 from energy_sim.application.validation import ValidationReport, ValidationService
 from energy_sim.domain.cost import CostBreakdown
-from energy_sim.infrastructure.csv_store import read_snapshot, write_snapshot
+from energy_sim.infrastructure.csv_store import (
+    Snapshot,
+    SnapshotRow,
+    read_snapshot,
+    write_snapshot,
+)
 from energy_sim.infrastructure.exporter import fetch_rows
 from energy_sim.infrastructure.tariff_loader import load_tariff
 from energy_sim.infrastructure.victoriametrics import DEFAULT_VM_URL, VictoriaMetricsClient
@@ -40,6 +45,20 @@ def render_cost_report(breakdown: CostBreakdown, title: str) -> str:
         f"  Off-peak import  {breakdown.offpeak_import_kwh:>10.1f} kWh",
     ]
     return "\n".join(lines)
+
+
+def render_export_summary(rows: list[SnapshotRow], out: str, step_seconds: int) -> str:
+    """What was written — and, when the sources had holes, how much of it is missing."""
+    snapshot = Snapshot(rows)
+    line = (f"Wrote {len(rows)} rows to {out} (step {step_seconds}s; "
+            f"import {snapshot.pf_import_kwh_total():.1f} kWh, "
+            f"export {snapshot.pf_export_kwh_total():.1f} kWh)")
+    incomplete = snapshot.incomplete_rows()
+    if incomplete:
+        line += (f"\n  {len(incomplete)} interval(s) with incomplete pf:* coverage "
+                 f"(first {incomplete[0].ts_utc:%Y-%m-%d %H:%M}Z): a blank column is an "
+                 f"interval nothing measured, so totals over it are short by that much.")
+    return line
 
 
 def _residual(comparison) -> str:
@@ -121,10 +140,7 @@ def _cmd_export(args) -> None:
     client = VictoriaMetricsClient(args.vm_url)
     rows = fetch_rows(client, start, end, args.step_seconds)
     write_snapshot(args.out, rows)
-    total_import = sum(r.grid_import_kwh for r in rows)
-    total_export = sum(r.grid_export_kwh for r in rows)
-    print(f"Wrote {len(rows)} rows to {args.out} "
-          f"(step {args.step_seconds}s; import {total_import:.1f} kWh, export {total_export:.1f} kWh)")
+    print(render_export_summary(rows, args.out, args.step_seconds))
 
 
 def _cmd_cost_report(args) -> None:
@@ -172,6 +188,12 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: list[str] | None = None) -> None:
+def main(argv: list[str] | None = None) -> int:
+    """Exit status is the contract: 0 only if the command did what it was asked to do.
+
+    A read that could not be completed raises out of here rather than being turned into a
+    smaller, quieter answer.
+    """
     args = build_parser().parse_args(argv)
     args.func(args)
+    return 0

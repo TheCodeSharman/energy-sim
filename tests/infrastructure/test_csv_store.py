@@ -62,3 +62,42 @@ def test_aurora_absent_when_columns_blank(tmp_path):
     assert snapshot.has_aurora is False
     # solar/load absent -> Site still builds, with no solar/load devices
     assert snapshot.to_site().solar is None
+
+
+def _flows(grid_import, grid_export, solar, consumption, ts=T0):
+    """A row carrying only the four flow columns — Aurora's are blank."""
+    return SnapshotRow(ts_utc=ts, interval_s=3600,
+                       grid_import_kwh=grid_import, grid_export_kwh=grid_export,
+                       solar_kwh=solar, consumption_kwh=consumption,
+                       aurora_kwh_peak=None, aurora_kwh_offpeak=None, aurora_kwh_export=None,
+                       aurora_dollar_peak=None, aurora_dollar_offpeak=None,
+                       aurora_dollar_export=None)
+
+
+def test_an_unmeasured_flow_round_trips_as_blank_not_as_zero(tmp_path):
+    path = tmp_path / "snap.csv"
+    write_snapshot(path, [_flows(None, 0.5, 1.5, 3.0)])
+    assert read_snapshot(path).rows[0].grid_import_kwh is None
+
+
+def test_a_row_missing_one_flow_is_reported_as_incomplete(tmp_path):
+    path = tmp_path / "snap.csv"
+    write_snapshot(path, [_flows(1.0, 0.0, None, None, ts=T0),
+                          _flows(2.0, 0.5, 1.5, 3.0, ts=T1)])
+    assert [r.ts_utc for r in read_snapshot(path).incomplete_rows()] == [T0]
+
+
+def test_a_row_measuring_nothing_at_all_is_not_called_incomplete(tmp_path):
+    # Nothing was measured anywhere, so there is no partial coverage to warn about.
+    path = tmp_path / "snap.csv"
+    write_snapshot(path, [_flows(None, None, None, None)])
+    assert read_snapshot(path).incomplete_rows() == []
+
+
+def test_totals_treat_an_unmeasured_interval_as_no_energy(tmp_path):
+    path = tmp_path / "snap.csv"
+    write_snapshot(path, [_flows(None, None, 1.5, 3.0, ts=T0),
+                          _flows(2.0, 0.5, 1.5, 3.0, ts=T1)])
+    snapshot = read_snapshot(path)
+    assert snapshot.pf_import_kwh_total() == 2.0
+    assert snapshot.pf_export_kwh_total() == 0.5

@@ -47,7 +47,8 @@ def test_hourly_aurora_kwh_attaches_to_the_interval_it_covers():
     aurora_kwh = {"peak": [(T1, 2.0)], "offpeak": [(T0, 1.0)], "export": [(T1, 0.5)]}
     rows = assemble_rows(power, aurora_kwh, {}, step_seconds=3600)
     assert rows == [
-        SnapshotRow(ts_utc=T0, interval_s=3600, grid_import_kwh=1.0, grid_export_kwh=0.0,
+        # Export has no sample covering the 05:00 interval, so it is blank rather than 0.0.
+        SnapshotRow(ts_utc=T0, interval_s=3600, grid_import_kwh=1.0, grid_export_kwh=None,
                     solar_kwh=0.0, consumption_kwh=1.0,
                     aurora_kwh_peak=None, aurora_kwh_offpeak=1.0, aurora_kwh_export=None,
                     aurora_dollar_peak=None, aurora_dollar_offpeak=None, aurora_dollar_export=None),
@@ -89,14 +90,25 @@ def test_daily_dollar_after_the_last_row_is_not_dropped():
     assert sum(r.aurora_dollar_total or 0.0 for r in rows) == 5.0
 
 
-def test_missing_grid_series_defaults_to_zero_but_absent_solar_is_none():
+def test_an_absent_series_is_unknown_not_zero():
     power = {"import": [(T1, 3600000.0)], "export": [], "solar": [], "consumption": []}
     rows = assemble_rows(power, {}, {}, step_seconds=3600)
     assert len(rows) == 1
     assert rows[0].grid_import_kwh == 3600.0  # 3.6 MW avg for 1h
-    assert rows[0].grid_export_kwh == 0.0
+    assert rows[0].grid_export_kwh is None
     assert rows[0].solar_kwh is None
     assert rows[0].aurora_kwh_peak is None
+
+
+def test_a_gap_inside_a_present_series_is_unknown_not_a_confident_zero():
+    # Solar covers both intervals, import only the first. The second row is built from partial
+    # coverage; recording "0 kWh imported" there would invent a reading nothing measured.
+    power = {"import": [(T1, 1000.0)], "solar": [(T1, 0.0), (T2, 500.0)]}
+    rows = assemble_rows(power, {}, {}, step_seconds=3600)
+    assert [r.ts_utc for r in rows] == [T0, T1]
+    assert rows[0].grid_import_kwh == 1.0
+    assert rows[1].grid_import_kwh is None
+    assert rows[1].solar_kwh == 0.5
 
 
 class _RecordingClient:
