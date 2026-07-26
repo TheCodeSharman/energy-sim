@@ -37,3 +37,16 @@ def test_peak_window_is_fixed_aest_not_dst_aware():
 def test_billing_days_are_dst_aware_even_though_the_window_is_not():
     tariff = load_tariff(CONFIG)
     assert tariff.billing_timezone.key == "Australia/Hobart"
+
+
+def test_period_boundary_falls_on_the_local_financial_year_not_the_utc_date():
+    """FY periods start 1 July *local*, so the 10 hours from 30 June 14:00Z are already FY N+1.
+
+    Looking the period up on the UTC date prices them in the outgoing year. Small in dollars,
+    but it is the same class of error as billing supply on UTC dates.
+    """
+    tariff = load_tariff(CONFIG)
+    just_before = datetime(2026, 6, 30, 13, 59, tzinfo=UTC)   # 2026-06-30 23:59 AEST
+    just_after = datetime(2026, 6, 30, 14, 0, tzinfo=UTC)     # 2026-07-01 00:00 AEST
+    assert tariff.supply_charge_per_day(just_before) == Decimal("151.1814")
+    assert tariff.supply_charge_per_day(just_after) == Decimal("172.3469")

@@ -54,3 +54,18 @@ def test_factors_default_to_unity_when_there_is_nothing_to_calibrate_against():
     factors = calibration_factors(snapshot)
     assert factors.import_factor == 1.0
     assert factors.export_factor == 1.0
+
+
+def test_a_leg_aurora_metered_as_zero_calibrates_to_zero_not_unity():
+    """Aurora metering zero export means zero export happened, whatever the CTs claim.
+
+    Returning 1.0 here would leave the pf:* reading untouched and credit an export Aurora
+    never paid for — silently, and reported as a normal result.
+    """
+    snapshot = Snapshot([
+        SnapshotRow(ts_utc=T0, interval_s=3600, grid_import_kwh=10.0, grid_export_kwh=50.0,
+                    solar_kwh=None, consumption_kwh=None,
+                    aurora_kwh_peak=5.0, aurora_kwh_offpeak=5.0, aurora_kwh_export=0.0,
+                    aurora_dollar_peak=None, aurora_dollar_offpeak=None, aurora_dollar_export=None),
+    ])
+    assert calibration_factors(snapshot).export_factor == 0.0

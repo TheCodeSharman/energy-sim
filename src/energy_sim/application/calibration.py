@@ -47,7 +47,13 @@ def _scaled(ts_utc, interval_s: int, energy: EnergyQuantity, factor: float) -> I
 
 
 def _ratio(aurora_kwh: float, pf_kwh: float) -> float:
-    """Unity when there is no pf:* energy to scale, or no Aurora reading to scale it to."""
-    if pf_kwh == 0 or aurora_kwh == 0:
+    """Unity only when there is no pf:* energy to scale.
+
+    A zero Aurora reading is information, not a missing value: if Aurora metered no export, no
+    export happened, whatever the CTs report. Returning 1.0 there would leave the pf:* figure
+    untouched and credit an export that was never paid — silently, and reported as a normal
+    result. Scaling to zero is the honest answer.
+    """
+    if pf_kwh == 0:
         return 1.0
     return aurora_kwh / pf_kwh

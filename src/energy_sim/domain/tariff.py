@@ -85,7 +85,10 @@ class Tariff:
         return self._period_for(dt_utc).supply_c_day
 
     def _period_for(self, dt_utc: datetime) -> TariffPeriod:
-        when = dt_utc.date()
+        # valid_from dates are LOCAL financial-year boundaries (1 July), so resolve the date in
+        # the billing zone. On the UTC date, the 10 hours from 30 June 14:00Z — already 1 July
+        # locally — would be priced in the outgoing year.
+        when = dt_utc.astimezone(self._billing_timezone).date()
         applicable = [p for p in self._periods if p.valid_from <= when]
         if not applicable:
             raise ValueError(

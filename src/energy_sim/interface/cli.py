@@ -151,7 +151,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_export = sub.add_parser("export", help="Snapshot a month from VictoriaMetrics to CSV.")
-    p_export.add_argument("--month", required=True, help="YYYY-MM (UTC month window)")
+    p_export.add_argument("--month", required=True,
+                          help="YYYY-MM — a local billing month, not a UTC one")
     p_export.add_argument("--out", required=True, help="Output CSV path")
     p_export.add_argument("--step-seconds", type=int, default=3600, dest="step_seconds")
     p_export.add_argument("--vm-url", default=DEFAULT_VM_URL, dest="vm_url")
