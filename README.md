@@ -42,6 +42,15 @@ python scripts/validate_all_months.py 2023-11 2026-06
 Validate the **whole series**, not a single month. Compensating errors cancel: a winter month
 validated cleanly while the model was wrong for half of every year.
 
+## What a blank cell means, and what an exit code means
+
+A blank flow column in a snapshot is an interval where **nothing was measured** — not zero
+energy. Reads that cannot be completed are retried and then raise; they never come back as an
+empty series, and `export` reports how many intervals were built from partial `pf:*` coverage.
+Both the CLI and the whole-series sweep exit non-zero if any month is missing from their
+totals, because a partial answer printed confidently is worse than no answer: a transient
+failure once turned 32 months into 29 and $2,302 into $1,817 while looking entirely healthy.
+
 ## Docs
 
 - [docs/aurora-data.md](docs/aurora-data.md) — Aurora's two clocks, daily-vs-hourly cadence, billing months
