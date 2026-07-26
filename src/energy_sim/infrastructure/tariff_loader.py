@@ -1,15 +1,6 @@
 """Load a Tariff from a TOML config file (stdlib tomllib).
 
 Keeps the tariff *constants* out of code: config/tariffs.toml is the source of truth.
-
-TOML numbers arrive as floats, so 35.4782 is already the nearest double, not the decimal
-written. ``Decimal(str(...))`` recovers the written value because ``str()`` of a float is the
-*shortest string that round-trips* to that double — so it returns "35.4782", while
-``Decimal(float)`` would preserve the binary value, 35.47820000000000106865...
-
-This is about exactness of representation, not accuracy: the numeric difference is ~1e-15
-dollars a month. It matters because ``Money`` promises exact decimal arithmetic and the tests
-compare against ``Decimal("35.4782")``, which binary noise would break.
 """
 from __future__ import annotations
 
@@ -23,6 +14,9 @@ from energy_sim.domain.tariff import PeakWindow, Tariff, TariffPeriod
 
 
 def _dec(value: object) -> Decimal:
+    # Via str(), not the float: str() returns the shortest round-tripping form, so 35.4782
+    # stays 35.4782 rather than becoming 35.47820000000000106865... No realistic rate/kWh
+    # pair makes that visible in dollars; it just keeps Money's exact-decimal claim honest.
     return Decimal(str(value))
 
 
