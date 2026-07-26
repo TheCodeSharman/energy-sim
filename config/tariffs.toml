@@ -42,7 +42,7 @@ valid_from    = "2025-07-01"
 peak_c_kwh    = 35.4782    # recovered from billed $ / metered kWh (docs said 31.948)
 offpeak_c_kwh = 16.6862    # recovered from billed $ / metered kWh (docs said 14.876)
 export_c_kwh  = 8.782
-supply_c_day  = 151.1814   # recovered from Aurora daily "Other" (see CHANGELOG / validation)
+supply_c_day  = 151.1814   # recovered from Aurora's billed daily "Other"; see docs/tariffs.md
 
 [[period]]                 # FY2026-27
 valid_from    = "2026-07-01"
