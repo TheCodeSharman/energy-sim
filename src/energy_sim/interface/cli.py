@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 from energy_sim.application.cost_calculator import CostCalculatorService
 from energy_sim.application.validation import ValidationReport, ValidationService
 from energy_sim.domain.cost import CostBreakdown
+from energy_sim.domain.site import BalanceError
 from energy_sim.infrastructure.csv_store import (
     Snapshot,
     SnapshotRow,
@@ -59,6 +60,36 @@ def render_export_summary(rows: list[SnapshotRow], out: str, step_seconds: int) 
                  f"(first {incomplete[0].ts_utc:%Y-%m-%d %H:%M}Z): a blank column is an "
                  f"interval nothing measured, so totals over it are short by that much.")
     return line
+
+
+def render_interval_consistency(errors: list[BalanceError], tolerance_kwh: float) -> str:
+    """Report the identity residual as the sampling artefact it is.
+
+    This was labelled "energy balance", which invites the reading that it validates metering.
+    It cannot: `pf:consumption_w` is *defined* as `solar + grid`, so the identity holds by
+    construction at every instant it is evaluated.
+
+    What it actually catches is an interval whose series were averaged over DIFFERENT numbers of
+    samples. `avg_over_time` averages each series over its own samples, and the fallback chains
+    are independent — so when solar drops to a sparser tier while grid stays hi-res, the row
+    combines (say) a 1-sample solar average with a 60-sample grid average and presents both as
+    covering the same hour. Verified over June 2026: all 13 breaches had fewer solar samples
+    than grid samples, and the three worst had exactly one.
+    """
+    if not errors:
+        return "Interval consistency — all intervals consistent."
+    worst = sorted(errors, key=lambda e: -abs(e.discrepancy_kwh))[:5]
+    lines = [
+        f"Interval consistency — {len(errors)} interval(s) where consumption differs from "
+        f"solar + import - export by more than {tolerance_kwh} kWh.",
+        "  Not a metering disagreement: pf:consumption_w is solar + grid by construction. These",
+        "  are intervals whose pf:* series were averaged over different sample counts — solar on",
+        "  a sparser fallback tier than grid — so the row mixes averages of unequal coverage.",
+    ]
+    lines += [f"    {e.ts_utc:%Y-%m-%d %H:%M}Z  {e.discrepancy_kwh:+.3f} kWh" for e in worst]
+    if len(errors) > len(worst):
+        lines.append(f"    (+{len(errors) - len(worst)} more)")
+    return "\n".join(lines)
 
 
 def _residual(comparison) -> str:
@@ -157,9 +188,8 @@ def _cmd_validate(args) -> None:
     print(render_validation(report, tolerance_cents=args.tolerance_cents))
 
     errors = snapshot.to_site().energy_balance_errors(tolerance_kwh=args.balance_tolerance_kwh)
-    if errors:
-        print(f"\nEnergy-balance: {len(errors)} interval(s) exceed "
-              f"{args.balance_tolerance_kwh} kWh (data-quality signal).")
+    print()
+    print(render_interval_consistency(errors, args.balance_tolerance_kwh))
 
 
 def build_parser() -> argparse.ArgumentParser:
