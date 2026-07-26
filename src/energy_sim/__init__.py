@@ -1,1 +1,1 @@
-"""energy-sim: home energy-cost / scenario simulator (DDD)."""
+"""energy-sim: home energy scenario simulator"""
