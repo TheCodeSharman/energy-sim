@@ -34,6 +34,21 @@ The feed-in tariff needed no correction.
 Cross-check any recovered rate this way before trusting it — a rate that produces an implausible
 year-on-year step is probably wrong.
 
+## Why the rates are quoted in the TOML
+
+```toml
+peak_c_kwh = "35.4782"     # quoted — keep it that way
+```
+
+TOML has no decimal type: the spec defines floats as IEEE 754 binary64, so an unquoted
+`35.4782` cannot hold that value, only the nearest double (`35.478200000000001...`). Strings are
+the only TOML type that carries an exact decimal, which is the same reason financial APIs
+serialise amounts as strings rather than numbers.
+
+Unquoting them still "works" — the numeric difference is ~1e-15 dollars a month — but every
+rate then drags a 50-digit tail through test failures and reprs, and the exact-equality tests
+against `Decimal("35.4782")` fail.
+
 ## See also
 
 - [aurora-data.md](aurora-data.md) — the clocks that decide which hours a rate applies to
