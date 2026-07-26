@@ -45,7 +45,7 @@ class LineComparison:
         return float(self.delta.dollars) / actual * 100.0
 
     def within(self, tolerance_cents: Decimal | float) -> bool:
-        return abs(self.delta.cents) <= Decimal(str(tolerance_cents))
+        return abs(self.delta.cents) <= Money.from_cents(tolerance_cents).cents
 
 
 @dataclass(frozen=True)
@@ -89,18 +89,18 @@ class ValidationService:
         modelled_peak = modelled_offpeak = modelled_export = modelled_supply = Money.zero()
         for r in rows:
             ts = r.ts_utc
-            modelled_peak += Money.from_cents(tariff.peak_rate(ts) * Decimal(str(_z(r.aurora_kwh_peak))))
-            modelled_offpeak += Money.from_cents(tariff.offpeak_rate(ts) * Decimal(str(_z(r.aurora_kwh_offpeak))))
-            modelled_export += Money.from_cents(tariff.export_rate(ts) * Decimal(str(_z(r.aurora_kwh_export))))
+            modelled_peak += Money.from_cents(tariff.peak_rate(ts)) * _z(r.aurora_kwh_peak)
+            modelled_offpeak += Money.from_cents(tariff.offpeak_rate(ts)) * _z(r.aurora_kwh_offpeak)
+            modelled_export += Money.from_cents(tariff.export_rate(ts)) * _z(r.aurora_kwh_export)
             if r.aurora_dollar_supply is not None:
                 # One modelled day per day Aurora actually billed a supply charge for.
                 modelled_supply += Money.from_cents(tariff.supply_charge_per_day(ts))
 
-        actual_peak = Money.from_dollars(sum(_z(r.aurora_dollar_peak) for r in rows))
-        actual_offpeak = Money.from_dollars(sum(_z(r.aurora_dollar_offpeak) for r in rows))
+        actual_peak = Money.from_dollars(_total(rows, "aurora_dollar_peak"))
+        actual_offpeak = Money.from_dollars(_total(rows, "aurora_dollar_offpeak"))
         # Aurora export dollars are a credit (billed sign may be negative); compare magnitudes.
-        actual_export = Money.from_dollars(abs(sum(_z(r.aurora_dollar_export) for r in rows)))
-        actual_supply = Money.from_dollars(sum(_z(r.aurora_dollar_supply) for r in rows))
+        actual_export = Money.from_dollars(abs(_total(rows, "aurora_dollar_export")))
+        actual_supply = Money.from_dollars(_total(rows, "aurora_dollar_supply"))
 
         return [
             LineComparison("peak import", modelled_peak, actual_peak),
@@ -148,6 +148,11 @@ class ValidationService:
             site = calibrate(site, factors.import_factor, factors.export_factor)
         modelled = CostCalculatorService().calculate(site, tariff).net_cost
         return LineComparison(label, modelled, Money.from_dollars(snapshot.aurora_billed_total()))
+
+
+def _total(rows, field: str) -> Decimal:
+    """Sum a dollar column as Decimal — money is never accumulated as float."""
+    return sum((getattr(r, field) or Decimal(0) for r in rows), Decimal(0))
 
 
 def _z(value: float | None) -> float:

@@ -30,11 +30,11 @@ TARIFF = Tariff(
 )
 
 # Aurora's daily dollars, all placed on the day's single dollar row (as the exporter does).
-DAILY_PEAK = 0.63896        # 2.0 kWh x 31.948c
-DAILY_OFFPEAK = 0.14876     # 1.0 kWh x 14.876c
-DAILY_EXPORT = -0.04391     # 0.5 kWh x 8.782c, billed as a credit
-DAILY_SUPPLY = 1.00
-DAILY_TOTAL = 1.74381       # peak + offpeak + export + supply
+DAILY_PEAK = Decimal("0.63896")       # 2.0 kWh x 31.948c
+DAILY_OFFPEAK = Decimal("0.14876")    # 1.0 kWh x 14.876c
+DAILY_EXPORT = Decimal("-0.04391")    # 0.5 kWh x 8.782c, billed as a credit
+DAILY_SUPPLY = Decimal("1.00")
+DAILY_TOTAL = Decimal("1.74381")      # peak + offpeak + export + supply
 
 SNAPSHOT = Snapshot([
     SnapshotRow(ts_utc=OFFPEAK, interval_s=3600, grid_import_kwh=0.8, grid_export_kwh=0.0,
@@ -81,7 +81,7 @@ def test_end_to_end_compares_modelled_net_cost_to_the_billed_total():
     report = ValidationService().validate(SNAPSHOT, TARIFF)
     # pf:* usage 0.8x14.876 + 1.6x31.948 - 0.4x8.782 = 59.5048c, plus 100c supply
     assert report.end_to_end.modelled == Money.from_dollars("1.595048")
-    assert report.end_to_end.actual == Money.from_dollars(str(DAILY_TOTAL))
+    assert report.end_to_end.actual == Money.from_dollars(DAILY_TOTAL)
 
 
 def test_uncalibrated_end_to_end_falls_short_because_the_cts_read_low():
@@ -97,7 +97,7 @@ def test_calibration_factors_come_from_auroras_metered_kwh():
 
 def test_calibrated_end_to_end_lands_on_the_bill():
     report = ValidationService().validate(SNAPSHOT, TARIFF)
-    assert report.end_to_end_calibrated.actual == Money.from_dollars(str(DAILY_TOTAL))
+    assert report.end_to_end_calibrated.actual == Money.from_dollars(DAILY_TOTAL)
     assert report.end_to_end_calibrated.within(0.001), report.end_to_end_calibrated.delta
 
 

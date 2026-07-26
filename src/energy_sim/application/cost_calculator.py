@@ -27,8 +27,8 @@ class CostCalculatorService:
             import_kwh = gi.import_energy.kwh
             export_kwh = gi.export_energy.kwh
 
-            import_cost += Money.from_cents(tariff.import_rate(ts) * Decimal(str(import_kwh)))
-            export_credit += Money.from_cents(tariff.export_rate(ts) * Decimal(str(export_kwh)))
+            import_cost += Money.from_cents(tariff.import_rate(ts)) * import_kwh
+            export_credit += Money.from_cents(tariff.export_rate(ts)) * export_kwh
 
             if tariff.is_peak(ts):
                 peak_import_kwh += import_kwh

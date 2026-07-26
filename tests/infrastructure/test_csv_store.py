@@ -1,4 +1,5 @@
 """CSV snapshot store: round-trip persistence + hydrating a Site + Aurora aggregates."""
+from decimal import Decimal
 from datetime import datetime, timezone
 
 from energy_sim.infrastructure.csv_store import SnapshotRow, read_snapshot, write_snapshot
@@ -13,11 +14,13 @@ def _rows():
         SnapshotRow(ts_utc=T0, interval_s=3600, grid_import_kwh=1.0, grid_export_kwh=0.0,
                     solar_kwh=0.0, consumption_kwh=1.0,
                     aurora_kwh_peak=0.0, aurora_kwh_offpeak=1.0, aurora_kwh_export=0.0,
-                    aurora_dollar_peak=0.0, aurora_dollar_offpeak=0.14876, aurora_dollar_export=0.0),
+                    aurora_dollar_peak=Decimal("0.0"), aurora_dollar_offpeak=Decimal("0.14876"),
+                    aurora_dollar_export=Decimal("0.0")),
         SnapshotRow(ts_utc=T1, interval_s=3600, grid_import_kwh=2.0, grid_export_kwh=0.5,
                     solar_kwh=1.5, consumption_kwh=3.0,
                     aurora_kwh_peak=2.0, aurora_kwh_offpeak=0.0, aurora_kwh_export=0.5,
-                    aurora_dollar_peak=0.63896, aurora_dollar_offpeak=0.0, aurora_dollar_export=-0.04391),
+                    aurora_dollar_peak=Decimal("0.63896"), aurora_dollar_offpeak=Decimal("0.0"),
+                    aurora_dollar_export=Decimal("-0.04391")),
     ]
 
 

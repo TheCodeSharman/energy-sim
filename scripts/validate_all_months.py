@@ -45,6 +45,7 @@ def main() -> None:
     print(f"{'month':9} {'billed':>9} {'measured':>9} {'Δ':>8} {'%':>7} "
           f"{'calibrated':>11} {'Δ':>8} {'%':>7} {'imp×':>6} {'exp×':>6} {'clsfy':>9}")
     rows_out = []
+    failed: list[str] = []
     for month in months(first, last):
         path = outdir / f"{month}.csv"
         try:
@@ -71,6 +72,7 @@ def main() -> None:
                              float(r.end_to_end_calibrated.delta.dollars),
                              r.end_to_end_calibrated.delta_pct or 0.0))
         except Exception as exc:  # keep going; a bad month should not stop the sweep
+            failed.append(month)
             print(f"{month:9} error: {type(exc).__name__}: {exc}")
 
     if not rows_out:
@@ -86,6 +88,11 @@ def main() -> None:
     print(f"  mean |monthly calibrated error| "
           f"{sum(abs(r[4]) for r in rows_out) / len(rows_out):.2f}%")
     print(f"  worst month {worst[0]} at {worst[4]:+.1f}%")
+    if failed:
+        # A partial sweep that prints a confident total is worse than one that fails loudly:
+        # a transient export error once silently turned 32 months into 29 and $2,302 into $1,817.
+        print(f"\n  *** INCOMPLETE: {len(failed)} month(s) failed and are NOT in the totals above "
+              f"({', '.join(failed)}). Re-run before trusting these numbers. ***")
 
 
 if __name__ == "__main__":
