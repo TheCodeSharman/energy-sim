@@ -12,6 +12,7 @@ from energy_sim.domain.site import BalanceError
 from energy_sim.domain.money import Money
 from energy_sim.infrastructure.csv_store import SnapshotRow
 from energy_sim.interface.cli import (
+    render_battery_report,
     render_cost_report,
     render_export_summary,
     render_interval_consistency,
@@ -43,6 +44,18 @@ def test_cost_report_shows_components_and_net():
     assert "$20.00" in text    # export credit
     assert "$85.00" in text    # net = 100 - 20 + 5
     assert "120" in text and "80" in text  # peak/off-peak kWh split
+
+
+def test_battery_report_shows_baseline_battery_and_saving():
+    baseline = CostBreakdown(import_cost=Money.from_dollars(100), export_credit=Money.from_dollars(20),
+                             supply_charge=Money.zero(), peak_import_kwh=0.0, offpeak_import_kwh=0.0)
+    with_battery = CostBreakdown(import_cost=Money.from_dollars(70), export_credit=Money.from_dollars(10),
+                                 supply_charge=Money.zero(), peak_import_kwh=0.0, offpeak_import_kwh=0.0)
+    text = render_battery_report(baseline, with_battery, title="June 2026", battery_label="10 kWh")
+    assert "10 kWh" in text
+    assert "$80.00" in text   # baseline net = 100 - 20
+    assert "$60.00" in text   # with battery = 70 - 10
+    assert "$20.00" in text   # saving = 80 - 60
 
 
 def test_validation_leads_with_the_billed_dollar_comparison():

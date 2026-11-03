@@ -10,8 +10,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from energy_sim.application.battery_dispatch import SelfConsumptionDispatch
 from energy_sim.application.cost_calculator import CostCalculatorService
 from energy_sim.application.validation import ValidationReport, ValidationService
+from energy_sim.domain.battery import Battery
 from energy_sim.domain.cost import CostBreakdown
 from energy_sim.domain.site import BalanceError
 from energy_sim.infrastructure.csv_store import (
@@ -46,6 +48,20 @@ def render_cost_report(breakdown: CostBreakdown, title: str) -> str:
         f"  Off-peak import  {breakdown.offpeak_import_kwh:>10.1f} kWh",
     ]
     return "\n".join(lines)
+
+
+def render_battery_report(baseline: CostBreakdown, with_battery: CostBreakdown,
+                          title: str, battery_label: str) -> str:
+    saving = baseline.net_cost - with_battery.net_cost
+    return "\n".join([
+        f"Battery what-if — {title}",
+        "-" * 48,
+        f"  Battery: {battery_label}",
+        "",
+        f"  Net cost (no battery)  {str(baseline.net_cost):>12}",
+        f"  Net cost (battery)     {str(with_battery.net_cost):>12}",
+        f"  {'Saving':<17}    {str(saving):>12}",
+    ])
 
 
 def render_export_summary(rows: list[SnapshotRow], out: str, step_seconds: int) -> str:
@@ -181,6 +197,20 @@ def _cmd_cost_report(args) -> None:
     print(render_cost_report(breakdown, title=Path(args.infile).stem))
 
 
+def _cmd_battery(args) -> None:
+    snapshot = read_snapshot(args.infile)
+    tariff = load_tariff(args.tariff)
+    site = snapshot.to_site()
+    baseline = CostCalculatorService().calculate(site, tariff)
+    battery = Battery(name="battery", usable_kwh=args.usable_kwh, max_power_kw=args.power_kw,
+                      round_trip_efficiency=args.round_trip)
+    adjusted = SelfConsumptionDispatch().apply(site, battery)
+    with_battery = CostCalculatorService().calculate(adjusted, tariff)
+    label = (f"{args.usable_kwh:g} kWh usable, {args.power_kw:g} kW, "
+             f"{args.round_trip:g} round-trip")
+    print(render_battery_report(baseline, with_battery, Path(args.infile).stem, label))
+
+
 def _cmd_validate(args) -> None:
     snapshot = read_snapshot(args.infile)
     tariff = load_tariff(args.tariff)
@@ -208,6 +238,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_cost.add_argument("--in", required=True, dest="infile", help="Snapshot CSV path")
     p_cost.add_argument("--tariff", default=str(DEFAULT_TARIFF))
     p_cost.set_defaults(func=_cmd_cost_report)
+
+    p_batt = sub.add_parser("battery", help="Battery what-if: cost saving vs the no-battery baseline.")
+    p_batt.add_argument("--in", required=True, dest="infile", help="Snapshot CSV path")
+    p_batt.add_argument("--tariff", default=str(DEFAULT_TARIFF))
+    p_batt.add_argument("--usable-kwh", type=float, required=True, dest="usable_kwh")
+    p_batt.add_argument("--power-kw", type=float, default=5.0, dest="power_kw")
+    p_batt.add_argument("--round-trip", type=float, default=0.9, dest="round_trip")
+    p_batt.set_defaults(func=_cmd_battery)
 
     p_val = sub.add_parser("validate", help="Validate a snapshot against Aurora billed data.")
     p_val.add_argument("--in", required=True, dest="infile", help="Snapshot CSV path")

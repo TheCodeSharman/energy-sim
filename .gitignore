@@ -4,3 +4,6 @@ __pycache__/
 .direnv/
 result
 data/months/
+.myenergi.env
+data/ev_hourly_myenergi.csv
+scripts/_ev_hourly.csv

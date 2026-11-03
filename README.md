@@ -4,7 +4,9 @@ A home energy-cost / scenario simulator built on the cleaned power-flow data fro
 `HomeAssistantConfig` project (VictoriaMetrics `pf:*` layer + Aurora Plus billed data).
 
 Replays real grid import/export, computes the Aurora Tariff 93 cost, and validates it against the
-dollars Aurora actually billed. Whole-home only — no per-device disaggregation, no battery.
+dollars Aurora actually billed. Whole-home cost accounting, plus a battery what-if (R2) that
+dispatches a modelled battery over the real flows and re-costs them; per-device disaggregation
+(EV/Zappi, hot water, heat pump) is R3, not yet built.
 
 The design is DDD-structured (a `Site` aggregate root owning a device topology) so later scenarios
 add a `Device` subtype rather than restructure.
@@ -27,6 +29,13 @@ reproducible:
 python -m energy_sim export --month 2026-06 --out data/energy_hourly_2026-06.csv
 python -m energy_sim cost-report --in data/energy_hourly_2026-06.csv
 python -m energy_sim validate    --in data/energy_hourly_2026-06.csv
+```
+
+Battery what-if — the saving a modelled battery would make against the no-battery baseline for a
+snapshot (self-consumption dispatch; `--power-kw` default 5, `--round-trip` default 0.9):
+
+```sh
+python -m energy_sim battery --in data/energy_hourly_2026-06.csv --usable-kwh 10
 ```
 
 Resolution is a parameter (`--step-seconds`, default 3600); `300` gives a 5-min snapshot with no

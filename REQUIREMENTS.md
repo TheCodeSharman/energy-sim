@@ -248,7 +248,79 @@ the topology stays minimal to what's exercised.)
 
 ---
 
-## R3+ — Device modelling (planned, not built)
+## R2 — Battery what-if (built)
+
+**Supersedes** the anticipated R2 above with what was actually built, following the approach it
+sketched: a `Battery` device plus a dispatch policy that transforms the real `GridConnection`
+series, re-costed by the **unchanged** `CostCalculatorService`.
+
+**Built.**
+- `DeviceRole.BATTERY` and a `Battery` domain entity (`domain/battery.py`): usable capacity, max
+  power, round-trip efficiency, SoC. It is a *store, not a meter* — `charge()`/`discharge()`
+  return the energy actually moved, clamped by power over the interval and by capacity.
+- `SelfConsumptionDispatch` (`application/battery_dispatch.py`): walks the grid in time order,
+  stores surplus that would otherwise export and spends it to cover import, and emits a new
+  `Site` whose `GridConnection` carries the adjusted flows. The cost seam is untouched — that is
+  the point of keeping the battery out of `CostCalculatorService`.
+- CLI `battery` subcommand: baseline net cost, battery net cost, and the saving for a snapshot.
+
+**Round-trip efficiency, done correctly.** Loss is split `sqrt(rt)` each way, so a full
+store-and-release loop keeps exactly `round_trip_efficiency`. The earlier throwaway spike
+(`scripts/battery_whatif.py`) applied the loss only on charge and let discharge out for free —
+modelling ~95% round trip instead of 90%, i.e. slightly flattering the battery. The domain model
+fixes this; battery savings here are correspondingly a little lower and are the honest figure.
+
+**Validated against real data.** Over the committed snapshots the no-battery baseline reproduces
+`cost-report` to the cent (June 2026 = $177.97 net), so any saving is a clean delta on the
+validated model. June 2026 with a 10 kWh / 5 kW / 90% battery saves $9.75 — small, because a
+solar battery is near-empty in a Tasmanian winter (the seasonal point the analysis surfaced).
+
+**Still out of scope.** Off-peak-grid-charging / peak-shaving dispatch (a second strategy, worth
+more in winter); battery degradation and warranty-life modelling; the sensitivity analysis the
+anticipated R2 mentioned. Device-level EV/Zappi modelling is R3.
+
+---
+
+## R3 — EV charger cost (built)
+
+**Requirement.** Model the EV charger (Zappi) as its own device and report what the car actually
+costs on the bill: grid-charged kWh at the time-of-use import rate, plus the export credit forgone
+by diverting surplus solar into the car instead of selling it.
+
+**Built.**
+- `DeviceRole.EV_CHARGER` and an `EVCharger` domain entity (`domain/ev_charger.py`) holding
+  `EVChargeInterval`s — each the energy delivered to the car over an interval, split solar/grid.
+- `EVCostService` (`application/ev_cost.py`): `EVCharger` + `Tariff` → `EVCostBreakdown`
+  (grid cost + forgone export credit). Same shape as `CostCalculatorService`.
+
+**The split is the device's own measurement, never reconstructed — this is the whole point.**
+An earlier attempt derived the solar/grid split from whole-home flows (import *with* the car minus
+import *without*). It was wrong, and provably so: the car is metered by the Zappi, while
+solar/grid come from the house CTs — a *different* meter that reads low (the documented CT bias).
+Differencing them blames the car for the household's own grid draw. On Oct 2026 the arithmetic
+claimed 119 kWh of grid charging where the Zappi measured 38 — over-attributing ~81 kWh. It is
+not a resolution artefact: recomputing at 5-minute vs hourly barely moved it (46% vs 52% solar),
+while the Zappi measured 83%. The Zappi measures its own energy; we read that number and stop.
+
+**Validated against real data.** Over the reliable window (Apr–Oct 2026, where the Zappi logs the
+diverted/boosted split) the car charged 1211 kWh — 84% solar, 16% grid — costing **$149 on the
+bill (~$257/yr annualised)**: ~$58 grid import + ~$91 forgone FiT. Against ~$1,300/yr of petrol
+for the same distance, the car saves ~$1,000/yr.
+
+**Data caveat (not a model caveat).** myenergi's historical API does not return the grid-boost
+channel (`h1b`) before ~April 2026 — at hourly *or* minute resolution — so all earlier charging is
+labelled "green". Total charging is reliable for the full 15 months (good for km / consumption);
+the solar/grid split, and hence the historical bill cost, is only trustworthy from April 2026. A
+clean device-measured summer will not exist until after Dec 2026–Feb 2027.
+
+**Still out of scope.** Loading the Zappi series into a committed snapshot + a CLI `ev-cost`
+command (the figure above is computed directly from `data/ev_hourly_myenergi.csv`); reconciling
+Zappi-metered charging against whole-home consumption as a cross-check; the three-input
+decomposition (house load + solar + EV → derive grid) as the sim's native shape.
+
+---
+
+## R3+ — Further device modelling (planned, not built)
 
 **Requirement (anticipated).** Model individual controllable/large loads as their own `Device`
 types (EV charger / Zappi, hot-water cylinder / Shelly, heat pump / Daikin) to answer

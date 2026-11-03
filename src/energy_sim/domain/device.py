@@ -15,6 +15,8 @@ class DeviceRole(Enum):
     GRID = "grid"
     SOLAR = "solar"
     LOAD = "load"
+    BATTERY = "battery"
+    EV_CHARGER = "ev_charger"
 
 
 class Device:
