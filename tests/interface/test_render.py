@@ -8,11 +8,14 @@ from energy_sim.application.validation import (
     ValidationReport,
 )
 from energy_sim.domain.cost import CostBreakdown
+from energy_sim.domain.site import BalanceError
 from energy_sim.domain.money import Money
 from energy_sim.infrastructure.csv_store import SnapshotRow
 from energy_sim.interface.cli import (
+    render_battery_report,
     render_cost_report,
     render_export_summary,
+    render_interval_consistency,
     render_validation,
 )
 
@@ -41,6 +44,18 @@ def test_cost_report_shows_components_and_net():
     assert "$20.00" in text    # export credit
     assert "$85.00" in text    # net = 100 - 20 + 5
     assert "120" in text and "80" in text  # peak/off-peak kWh split
+
+
+def test_battery_report_shows_baseline_battery_and_saving():
+    baseline = CostBreakdown(import_cost=Money.from_dollars(100), export_credit=Money.from_dollars(20),
+                             supply_charge=Money.zero(), peak_import_kwh=0.0, offpeak_import_kwh=0.0)
+    with_battery = CostBreakdown(import_cost=Money.from_dollars(70), export_credit=Money.from_dollars(10),
+                                 supply_charge=Money.zero(), peak_import_kwh=0.0, offpeak_import_kwh=0.0)
+    text = render_battery_report(baseline, with_battery, title="June 2026", battery_label="10 kWh")
+    assert "10 kWh" in text
+    assert "$80.00" in text   # baseline net = 100 - 20
+    assert "$60.00" in text   # with battery = 70 - 10
+    assert "$20.00" in text   # saving = 80 - 60
 
 
 def test_validation_leads_with_the_billed_dollar_comparison():
@@ -97,3 +112,37 @@ def test_export_summary_names_the_intervals_built_from_partial_coverage():
 def test_export_summary_stays_quiet_when_coverage_is_complete():
     rows = [_flow_row(T0, 1.0, 0.5), _flow_row(T1, 2.0, 0.5)]
     assert "incomplete" not in render_export_summary(rows, "june.csv", 3600)
+
+
+# --- what the identity residual actually detects --------------------------------
+
+def _breach(hour, kwh):
+    return BalanceError(ts_utc=datetime(2026, 6, 4, hour, tzinfo=UTC), discrepancy_kwh=kwh)
+
+
+def test_no_breaches_says_so_plainly():
+    assert "consistent" in render_interval_consistency([], 0.01).lower()
+
+
+def test_breaches_are_not_called_an_energy_balance_failure():
+    # `pf:consumption_w` IS `solar + grid` by construction, so the identity cannot fail on
+    # metering grounds. Calling it "energy balance" invites exactly that misreading.
+    out = render_interval_consistency([_breach(18, -1.086)], 0.01)
+    assert "energy-balance" not in out.lower()
+    assert "energy balance" not in out.lower()
+
+
+def test_breaches_are_explained_as_differing_sample_density():
+    out = render_interval_consistency([_breach(18, -1.086)], 0.01)
+    assert "sample" in out.lower()
+
+
+def test_the_worst_offenders_are_named_so_they_can_be_looked_up():
+    out = render_interval_consistency([_breach(18, -1.086), _breach(15, -0.030)], 0.01)
+    assert "2026-06-04 18:00" in out
+    assert "-1.086" in out
+
+
+def test_the_count_and_tolerance_are_reported():
+    out = render_interval_consistency([_breach(18, -1.086)], 0.01)
+    assert "1 interval" in out and "0.01" in out
