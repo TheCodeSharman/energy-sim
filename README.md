@@ -65,6 +65,8 @@ failure once turned 32 months into 29 and $2,302 into $1,817 while looking entir
 - [docs/aurora-data.md](docs/aurora-data.md) — Aurora's two clocks, daily-vs-hourly cadence, billing months
 - [docs/timestamps.md](docs/timestamps.md) — the interval convention, and the resolution-drift symptom
 - [docs/tariffs.md](docs/tariffs.md) — recovering rates from the bill when published figures are wrong
+- [docs/energy-review.md](docs/energy-review.md) — findings from using the model: per-load costs,
+  the battery/off-grid/zero-bill answers, and the heat-pump repair
 - `config/tariffs.toml` — the authoritative rates, periods and peak window
 - `REQUIREMENTS.md` — the incremental requirements log; this project doubles as a repeatable
   AI-assisted-codegen experiment, so each requirement change is recorded to allow a replay
