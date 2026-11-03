@@ -13,6 +13,14 @@ eliminated both ~30% of the heat pump's own energy **and** the ~$240/winter of r
 heating that was papering over it — ~$250–300/yr in total. Everything else is modest, already
 near-optimal, or explained by working from home.
 
+**Expected bill impact of the repair.** ~$250–300/yr off an annual net bill of ~$1,000 is a ~25%
+drop — but it's almost all winter load, so it won't show in summer and will hit the cold months
+hard (the resistive block was ~a third of a deep-winter night's energy). It's a drop *back to
+normal*: the broken unit was effectively a ~25% "faulty heat pump" tax. The real confirmation
+arrives with the **first clean post-repair winter, Jun–Aug 2027** — the repair landed too late
+(~late Aug 2026) for winter 2026 to be a fair test. Worth re-checking the winter-2027 data against
+this.
+
 ## Where the electricity goes
 
 Whole-home ≈ 9,000–10,600 kWh/yr. Disaggregated over the window where every device is metered
