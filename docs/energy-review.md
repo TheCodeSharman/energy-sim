@@ -99,12 +99,20 @@ unnecessary.
 
 ## Resistive heating
 
-Fan heater (1200 W at 50%) and a month on an oil column heater were used to paper over the broken
-heat pump, mostly in deep winter (Jun–Jul) *before* any device metering, so they can't be isolated
-in the data. They were resistive (COP 1) against a heat-pump COP ~3.5 — i.e. ~3.5× the cost per
-unit of heat. With the repaired unit (which now has the headroom to cover the coldest days) and a
-stratification fix, resistive backup should never be needed again. This is worth more than any
-tariff tweak.
+Fan heater (1200 W at 50% ≈ 600 W), run many nights and often all night, plus a month on an oil
+column heater — used to paper over the broken heat pump, mostly in deep winter (Jun–Jul) *before*
+any device metering, so it can't be isolated in the data.
+
+**Rough cost of that one broken winter:** from the wattage and described use — ~600 W fan for
+~10–12h over ~40–60 nights (~250–430 kWh) plus a thermostatic oil heater (~0.8 kW avg) for a month
+(~240 kWh) — call it **~400–700 kWh, ~$75–150**, mostly at overnight off-peak. Deliberately a
+back-of-envelope; the hours were never metered, so treat it as order-of-magnitude.
+
+It was the expensive way to heat: resistive (COP 1) against a heat-pump COP ~3.5 — **~3.5× the
+cost per unit of heat.** And it was a *symptom* of the fault, not a habit. With the repaired unit
+(now with headroom for the coldest days) and a stratification fix, resistive backup should never be
+needed again — so **avoiding that ~$75–150/winter is part of the repair's real value**, on top of
+the ~30% heat-pump energy saving. Worth far more than any tariff tweak.
 
 ## Hot water
 
