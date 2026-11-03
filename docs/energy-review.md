@@ -7,9 +7,11 @@ through the record (see *Data coverage* below), so "recent" would rot.
 
 ## Headline
 
-There is **no expensive fault or hidden load**. The one real problem — a degraded heat-pump
-outdoor unit — was already repaired (~late Aug / early Sep 2026) and is the single biggest saving
-in here. Everything else is modest, already near-optimal, or explained by working from home.
+There is **no hidden always-on load**. The one real problem — a degraded heat-pump outdoor unit —
+was already repaired (~late Aug / early Sep 2026) and is the single biggest saving in here: it
+eliminated both ~30% of the heat pump's own energy **and** the ~$240/winter of resistive backup
+heating that was papering over it — ~$250–300/yr in total. Everything else is modest, already
+near-optimal, or explained by working from home.
 
 ## Where the electricity goes
 
@@ -99,20 +101,31 @@ unnecessary.
 
 ## Resistive heating
 
-Fan heater (1200 W at 50% ≈ 600 W), run many nights and often all night, plus a month on an oil
-column heater — used to paper over the broken heat pump, mostly in deep winter (Jun–Jul) *before*
-any device metering, so it can't be isolated in the data.
+**This was the bulk of the winter cost — recovered from deep-winter whole-home data, not a guess.**
+It was easy to under-estimate at first by looking at the wrong window: the device meters and the
+"flat ~0.7 kW residual" (below) start late July — *after* the heater use stopped and the heat pump
+was repaired. But whole-home `pf:*` consumption goes back to 2023, so the June–July nights are
+visible.
 
-**Rough cost of that one broken winter:** from the wattage and described use — ~600 W fan for
-~10–12h over ~40–60 nights (~250–430 kWh) plus a thermostatic oil heater (~0.8 kW avg) for a month
-(~240 kWh) — call it **~400–700 kWh, ~$75–150**, mostly at overnight off-peak. Deliberately a
-back-of-envelope; the hours were never metered, so treat it as order-of-magnitude.
+June–July 2026 residual (whole-home minus the metered heat pump and EV), by local hour, is exactly
+the shape recalled from memory:
 
-It was the expensive way to heat: resistive (COP 1) against a heat-pump COP ~3.5 — **~3.5× the
-cost per unit of heat.** And it was a *symptom* of the fault, not a habit. With the repaired unit
-(now with headroom for the coldest days) and a stratification fix, resistive backup should never be
-needed again — so **avoiding that ~$75–150/winter is part of the repair's real value**, on top of
-the ~30% heat-pump energy saving. Worth far more than any tariff tweak.
+- a **flat ~1.5 kW block right through the night** (8pm–8am) — a 1200 W resistive heater running
+  all night, on top of ~0.3 kW base;
+- a **3–4am spike** (hot-water off-peak boost);
+- **cooking peaks around noon (~0.9 kW) and 5–7pm (~1.5 kW)**; quiet (~0.5 kW) through the day.
+
+Overnight residual averaged **~21 kWh/night**; after base + hot water (~7 kWh) that leaves
+**~14 kWh/night of resistive heat — almost exactly 1200 W × 12h**. Over a ~90-night heating season:
+**~1,250 kWh ≈ ~$240/winter** (at ~19c/kWh; range ~$180–320 depending on nights and the
+peak/off-peak mix). The earlier ~$75–150 estimate was too low.
+
+It was resistive (COP 1) against a heat-pump COP ~3.5 — **~3.5× the cost of the same heat** — and a
+*symptom* of the broken unit, not a habit. So the repair's real value isn't just the ~30%
+efficiency gain (~$50/yr); it's **also removing ~$240/winter of resistive backup**, because the
+repaired unit (plus a stratification fix for comfort) ends the need for it. Total repair value
+~$250–300/yr — and the "huge difference" expected from never running resistive heating again is
+real.
 
 ## Hot water
 
